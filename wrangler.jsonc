@@ -3,6 +3,7 @@
   "name": "smuggled-phrases",
   "main": "worker/index.ts",
   "compatibility_date": "2025-06-01",
+  "routes": [{ "pattern": "smuggled.qiiver.com", "custom_domain": true }],
   // The built PWA. Unknown paths fall back to index.html; /api/* always hits the Worker.
   "assets": {
     "directory": "./dist",
