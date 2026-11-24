@@ -39,6 +39,7 @@ state is persisted locally, and synced phones reconnect on their own.
 | Part | Choice |
 | --- | --- |
 | App | Vite, TypeScript, Preact; fonts bundled, no runtime network dependencies |
+| Effects | Phaser 3 as a transparent canvas over the UI (searchlights, fog, stamp dust, fuse sparks, alarm lights, cash rain); Web Audio for synthesized sound |
 | PWA | Web app manifest plus a small hand-written service worker that precaches every built file |
 | Rules | Pure TypeScript module shared by the app and the server |
 | Realtime | One Cloudflare Worker; one Durable Object per room, hibernating WebSockets |
@@ -57,6 +58,9 @@ src/
   client/           the PWA
     session.ts      OfflineSession (local engine) and SyncSession (socket, reconnects)
     hand.tsx        hand, countdowns, cover, call / swap / accused flows
+    fx.ts           Phaser effects layer, lazy-loaded; every call is a no-op until it is ready
+    sfx.ts          synthesized sound effects and the mute setting
+    flavor.ts       aliases, quips, ranks and the lifetime rap sheet
     screens.tsx     start, setup, lobby, scoreboard, win, how-to
     sw.js           service worker template (file list injected at build)
 worker/index.ts     Worker entry and the RoomObject Durable Object
@@ -119,6 +123,23 @@ Register it in `PACKS` in `src/shared/packs.ts` and it appears in the host's pac
 modes (`"rating": "adult"` is labelled 18+). Bump `version` whenever you edit a pack, so offline
 shuffles never mix old and new contents. `buildDeck()` also accepts unregistered packs, which is
 the hook for user-made custom packs later. The pack tests check for duplicates across packs.
+
+## Look, feel and noise
+
+The app is dressed as the inside of a shipping container at night: stained paperwork taped to
+steel, a swinging lamp, hazard tape, crate-plank buttons. The cards and controls are ordinary
+page elements, so text stays sharp and screen readers still work; Phaser only draws on a canvas
+laid over the top and never receives input.
+
+- Phaser is a separate chunk loaded after the app is interactive, capped at 30 fps, and precached
+  by the service worker so the effects also work offline.
+- With "reduce motion" switched on in the phone's settings, Phaser is never loaded and all CSS
+  animation is turned off. The game plays exactly the same.
+- Sounds are generated in the browser (no audio files). Nothing makes a noise while a countdown is
+  secretly running; the stamp, the "Contraband!" siren and the win fanfare do. The speaker button
+  on the start screen and in the scoreboard mutes everything.
+- The start screen keeps a lifetime "rap sheet" for this phone (phrases smuggled, seized, clean
+  getaways) with a rank that climbs from Tourist to Legend of the Docks.
 
 ## Good to know
 

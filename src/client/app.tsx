@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { normalizeCode } from '../shared/prng';
 import type { Announcement } from '../shared/protocol';
+import { addToRapSheet } from './flavor';
+import { fx } from './fx';
 import { Hand } from './hand';
 import { HowTo, Home, Lobby, Scoreboard, Setup, Win } from './screens';
 import { restoreSession, type Session } from './session';
+import { sfx } from './sfx';
 import { buzz, Toasts, useSession, type Toast } from './ui';
 
 type Route = { name: 'home' } | { name: 'setup'; kind: 'create' | 'join'; code?: string; forceSync?: boolean } | { name: 'howto'; back: Route } | { name: 'game' };
@@ -41,6 +44,10 @@ export function App() {
   });
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(1);
+  const fxLayer = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (fxLayer.current) fx.start(fxLayer.current);
+  }, []);
 
   const toast = (t: Omit<Toast, 'id'>) => {
     const id = nextId.current++;
@@ -50,7 +57,12 @@ export function App() {
 
   useEffect(() => {
     if (!session) return;
-    const offNews = session.onNews((a) => toast(describe(a)));
+    const offNews = session.onNews((a) => {
+      toast(describe(a));
+      if (a.kind === 'wrongCall') sfx.buzzer();
+      if (a.kind === 'seized' || a.kind === 'smuggled') sfx.thud();
+      if (a.kind === 'joined') sfx.flick();
+    });
     const offError = session.onError((message) => toast({ body: message }));
     return () => {
       offNews();
@@ -90,8 +102,11 @@ export function App() {
 
   return (
     <>
-      {screen}
-      <Toasts items={toasts} />
+      <div class="world">
+        {screen}
+        <Toasts items={toasts} />
+      </div>
+      <div class="fx" ref={fxLayer} aria-hidden="true" />
     </>
   );
 }
@@ -105,6 +120,9 @@ function Game(props: { session: Session; onLeave: () => void; onHome: () => void
   useEffect(() => {
     if (won) {
       buzz([100, 60, 100, 60, 500]);
+      fx.cash();
+      sfx.fanfare();
+      if (state.winner?.id === state.you.id) addToRapSheet({ getaways: 1 });
       // The win screen says it all; don't bury it under announcements.
       props.onOver();
     }
@@ -116,7 +134,7 @@ function Game(props: { session: Session; onLeave: () => void; onHome: () => void
   if (state.fatal) {
     return (
       <div class="screen" style="justify-content:center;gap:16px;text-align:center">
-        <span class="stamp big" style="align-self:center">Denied</span>
+        <span class="stamp big thud" style="align-self:center">Denied</span>
         <p>{state.fatal}</p>
         <button class="btn" onClick={props.onLeave}>Back to start</button>
       </div>

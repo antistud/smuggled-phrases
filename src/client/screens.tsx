@@ -1,19 +1,65 @@
 /** Everything outside the hand itself: start, setup, lobby, scoreboard, win, how-to. */
 import qrcode from 'qrcode-generator';
-import { useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useState } from 'preact/hooks';
 import { manifestNumber, MAX_OFFLINE_PLAYERS } from '../shared/deal';
 import { DEFAULT_PACK_IDS, getPack, PACKS } from '../shared/packs';
 import { CODE_LENGTH, normalizeCode, randomCode } from '../shared/prng';
 import { MAX_NAME_LENGTH } from '../shared/protocol';
+import { randomAlias, rankFor, rapSheet, SAMPLE_PHRASES } from './flavor';
+import { reducedMotion } from './fx';
+import { isMuted, setMuted, sfx } from './sfx';
 import { OfflineSession, SyncSession, type Session, type SessionState } from './session';
 import { load, save } from './storage';
-import { Badges, Sheet, TopBar } from './ui';
+import { Badges, Icon, Sheet, TopBar } from './ui';
 
 // ------------------------------------------------------------------- home
 
+/** Types sample contraband onto the form, one phrase after another. */
+function useTypewriter(lines: string[]): string {
+  const [text, setText] = useState(lines[0]);
+  useEffect(() => {
+    if (reducedMotion()) return;
+    let line = 0;
+    let at = lines[0].length;
+    let hold = 24;
+    const id = setInterval(() => {
+      if (hold > 0) return void hold--;
+      at += 1;
+      if (at > lines[line].length) {
+        line = (line + 1) % lines.length;
+        at = 0;
+      }
+      if (at === lines[line].length) hold = 26;
+      setText(lines[line].slice(0, at));
+    }, 65);
+    return () => clearInterval(id);
+  }, []);
+  return text;
+}
+
+export function MuteButton() {
+  const [muted, setState] = useState(isMuted());
+  const toggle = () => {
+    setMuted(!muted);
+    setState(!muted);
+    if (muted) sfx.flick();
+  };
+  return (
+    <button class="iconbtn" onClick={toggle} aria-pressed={muted} aria-label={muted ? 'Sound off. Tap to turn on.' : 'Sound on. Tap to mute.'}>
+      <Icon name={muted ? 'soundOff' : 'sound'} />
+    </button>
+  );
+}
+
 export function Home(props: { resume: SessionState | null; onResume: () => void; onCreate: () => void; onJoin: () => void; onHowTo: () => void }) {
+  const typed = useTypewriter(SAMPLE_PHRASES);
+  const sheet = rapSheet();
   return (
     <div class="screen home">
+      <span class="lamp" aria-hidden="true" />
+      <div class="corner">
+        <MuteButton />
+      </div>
       <div>
         <h1 class="wordmark">
           <span class="stencil w1">Smuggled</span>
@@ -21,17 +67,28 @@ export function Home(props: { resume: SessionState | null; onResume: () => void;
         </h1>
         <p class="tagline">Nothing to declare. Plenty to say.</p>
         <div class="hero" aria-hidden="true">
-          <div class="paper">
+          <div class="paper slip">
             <div class="paper-head">
               <span>Form SP-30</span>
               <span>Goods to declare</span>
             </div>
-            <div class="phrase">emergency lasagna</div>
+            <div class="phrase">{typed}</div>
+            <span class="stamp green">Cleared</span>
           </div>
-          <span class="stamp green">Cleared</span>
+          <div class="crate">
+            <span>
+              FRAGILE
+              <small>definitely just bananas</small>
+            </span>
+          </div>
         </div>
       </div>
       <div class="stack">
+        {sheet.smuggled + sheet.seized > 0 && (
+          <p class="rapsheet">
+            Rap sheet: <b>{rankFor(sheet.smuggled)}</b> · {sheet.smuggled} smuggled · {sheet.seized} seized · {sheet.getaways} clean {sheet.getaways === 1 ? 'getaway' : 'getaways'}
+          </p>
+        )}
         {props.resume && (
           <button class="btn amber" onClick={props.onResume}>
             Resume game {props.resume.code}
@@ -132,10 +189,13 @@ export function Setup(props: { kind: 'create' | 'join'; code?: string; forceSync
 
         {mode === 'sync' && (
           <label class="field">
-            <span class="label">Your name</span>
-            <input value={name} maxLength={MAX_NAME_LENGTH} placeholder="e.g. Captain Biscuit" autocomplete="nickname" enterkeyhint="go"
+            <span class="label">Your alias</span>
+            <span class="row">
+            <input value={name} maxLength={MAX_NAME_LENGTH} placeholder="e.g. Sticky Pete" autocomplete="nickname" enterkeyhint="go"
               onInput={(e) => setName((e.target as HTMLInputElement).value)}
               onKeyDown={(e) => e.key === 'Enter' && go()} />
+            <button type="button" class="btn small ghost" style="min-height:56px" onClick={(e) => { e.preventDefault(); sfx.flick(); setName(randomAlias()); }} aria-label="Give me a random alias">🎲</button>
+            </span>
           </label>
         )}
 
@@ -198,7 +258,7 @@ export function Lobby(props: { session: Session; state: SessionState; onLeave: (
   };
   return (
     <div class="screen">
-      <TopBar title="Departure lounge" onBack={props.onLeave} />
+      <TopBar title="The hideout" onBack={props.onLeave} />
       <div class="stack" style="gap:14px">
         <div class="codebox">
           <span class="codechip">{state.code}</span>
@@ -207,7 +267,7 @@ export function Lobby(props: { session: Session; state: SessionState; onLeave: (
         <button class="link" onClick={share}>Share invite link</button>
         <div class="paper">
           <div class="paper-head">
-            <span>Passenger manifest</span>
+            <span>The crew</span>
             <span>{state.connection === 'online' ? `${state.players.length} aboard` : 'Connecting…'}</span>
           </div>
           <ul class="manifest">
@@ -227,7 +287,7 @@ export function Lobby(props: { session: Session; state: SessionState; onLeave: (
         </p>
         {isHost ? (
           <button class="btn amber" disabled={state.players.length < 2 || state.connection !== 'online'} onClick={() => session.start()}>
-            {state.players.length < 2 ? 'Waiting for smugglers…' : 'Deal the contraband'}
+            {state.players.length < 2 ? 'Waiting for the crew…' : 'Deal the contraband'}
           </button>
         ) : (
           <p class="note">Waiting for the host to deal the contraband…</p>
@@ -239,12 +299,14 @@ export function Lobby(props: { session: Session; state: SessionState; onLeave: (
 
 // ------------------------------------------------------------- scoreboard
 
+const GAME_RANKS = ['Tourist', 'Pickpocket', 'Mule', 'Runner', 'Fixer', 'Kingpin'];
+
 export function Scoreboard(props: { session: Session; state: SessionState; onClose: () => void; onHowTo: () => void; onLeave: () => void }) {
   const { session, state } = props;
   const isHost = state.mode === 'sync' && state.hostId === state.you.id;
   const [confirmLeave, setConfirmLeave] = useState(false);
   return (
-    <Sheet title={state.mode === 'sync' ? 'Customs ledger' : 'Your ledger'} onClose={props.onClose}>
+    <Sheet title={state.mode === 'sync' ? 'Most wanted' : 'Your record'} onClose={props.onClose}>
       <div class="paper">
         <div class="paper-head">
           <span>Game {state.code}</span>
@@ -260,12 +322,15 @@ export function Scoreboard(props: { session: Session; state: SessionState; onClo
             </tr>
           </thead>
           <tbody>
-            {[...state.players].sort((a, b) => a.cards - b.cards).map((p) => (
-              <tr key={p.id}>
+            {[...state.players].sort((a, b) => a.cards - b.cards).map((p, i) => (
+              <tr key={p.id} class={i === 0 && state.players.length > 1 ? 'lead' : ''}>
                 <td>
                   <span class="name">
                     {state.mode === 'sync' && <span class={`dot ${p.connected ? '' : 'off'}`} title={p.connected ? 'Connected' : 'Away'} />}
-                    {p.name}
+                    <span>
+                      {p.name}
+                      <span class="rank">{GAME_RANKS[Math.min(p.smuggled, GAME_RANKS.length - 1)]}</span>
+                    </span>
                     {p.id === state.you.id && state.mode === 'sync' && <span class="tag you">You</span>}
                     {isHost && p.id !== state.you.id && !p.connected && (
                       <button class="kick" onClick={() => session.kick(p.id)}>Remove</button>
@@ -283,7 +348,10 @@ export function Scoreboard(props: { session: Session; state: SessionState; onClo
       {state.mode === 'offline' && (
         <p class="muted" style="font-size:.9rem">Offline games keep score on each phone. Ask around to see who is closest to an empty hand.</p>
       )}
-      <button class="btn ghost" onClick={props.onHowTo}>How to play</button>
+      <div class="row">
+        <button class="btn ghost" onClick={props.onHowTo}>How to play</button>
+        <MuteButton />
+      </div>
       {isHost && state.phase === 'playing' && (
         <button class="btn ghost" onClick={() => { session.again(); props.onClose(); }}>Re-deal a new game</button>
       )}
@@ -310,7 +378,7 @@ export function Win(props: { session: Session; state: SessionState; onLeave: () 
   return (
     <div class="screen win">
       <div style="margin-top:3vh">
-        <span class="stamp green big thud">Cleared</span>
+        <span class="stamp green big thud">Clean getaway</span>
       </div>
       <p class="label">{mine ? 'You walked straight through customs' : 'Walked straight through customs'}</p>
       <div class="who">{mine && state.mode === 'offline' ? 'You win!' : winner.name}</div>
@@ -341,7 +409,7 @@ export function HowTo(props: { onBack: () => void }) {
   return (
     <div class="screen">
       <TopBar title="How to play" onBack={props.onBack} />
-      <p class="tagline" style="margin:0 0 14px">Talk normally. Smuggle nonsense. Don’t get searched.</p>
+      <p class="tagline" style="margin:0 0 14px">Talk normal. Smuggle nonsense. Don’t get searched.</p>
       <ol class="rules">
         <li class="paper">You start with <b>5 secret phrases</b>. Keep your phone to yourself.</li>
         <li class="paper">Work a phrase into the conversation <b>out loud</b>, then tap <b>I said it</b> on that card. A private 30-second countdown starts.</li>

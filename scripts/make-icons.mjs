@@ -29,7 +29,7 @@ for (const t of targets) {
   const page = await browser.newPage({ viewport: { width: t.size, height: t.size } });
   const inner = Math.round(t.size * (1 - t.pad * 2));
   await page.setContent(
-    `<body style="margin:0;background:#0f1a30;display:grid;place-items:center;height:100vh">
+    `<body style="margin:0;background:#12100c;display:grid;place-items:center;height:100vh">
        <div style="width:${inner}px;height:${inner}px">${t.source.replace('<svg ', '<svg width="100%" height="100%" ')}</div>
      </body>`,
   );
