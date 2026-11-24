@@ -6,6 +6,10 @@ An in-person party game, as an installable PWA. Every phone privately holds a ha
 phrases. Work one into the real conversation without anyone noticing and you have smuggled it.
 The app only manages hands, timers and scoring; all of the play happens out loud.
 
+| | | | |
+| --- | --- | --- | --- |
+| ![Start screen](docs/home.png) | ![A live countdown](docs/hand.png) | ![Covered hand](docs/cover.png) | ![Contraband! raid](docs/raid.png) |
+
 ## How to play
 
 1. Everyone starts with **5 secret phrases**.
