@@ -8,6 +8,7 @@
  */
 import type { Phrase } from './packs';
 
+/** Default starting hand; a game can choose its own (see settings.ts). */
 export const HAND_SIZE = 5;
 export const TIMER_MS = 30_000;
 export const STARTING_BADGES = 3;
@@ -37,6 +38,8 @@ export interface Accusation {
 }
 
 export interface Game {
+  /** Phrases each player starts with (also used to deal in late joiners). */
+  handSize: number;
   players: Record<string, Player>;
   /** Draw pile; index 0 is the next card. */
   pile: Phrase[];
@@ -131,9 +134,13 @@ function clone(game: Game): Game {
   return JSON.parse(JSON.stringify(game)) as Game;
 }
 
+function toPhrase(p: Phrase): Phrase {
+  return { id: p.id, text: p.text, heat: p.heat };
+}
+
 function draw(game: Game): Card | null {
   const next = game.pile.shift();
-  return next ? { id: next.id, text: next.text, saidAt: null } : null;
+  return next ? { ...toPhrase(next), saidAt: null } : null;
 }
 
 function checkWin(game: Game, playerId: string, events: GameEvent[]): void {
@@ -147,7 +154,7 @@ function checkWin(game: Game, playerId: string, events: GameEvent[]): void {
 /** Seizes a card and deals its replacement into the same slot. */
 function seize(game: Game, player: Player, index: number): Phrase {
   const [card] = player.hand.splice(index, 1);
-  const phrase = { id: card.id, text: card.text };
+  const phrase = toPhrase(card);
   player.seized.push(phrase);
   const replacement = draw(game);
   if (replacement) player.hand.splice(index, 0, replacement);
@@ -162,15 +169,20 @@ function penalise(game: Game, caller: Player): void {
 
 // ------------------------------------------------------------------ setup
 
-/** Deals HAND_SIZE cards to each player, in order, from the top of `pile`. */
-export function createGame(playerIds: readonly string[], pile: readonly Phrase[]): Game {
-  const game: Game = { players: {}, pile: pile.map((p) => ({ id: p.id, text: p.text })), accusation: null, winnerId: null };
-  for (const id of playerIds) game.players[id] = newPlayer(id);
-  for (let i = 0; i < HAND_SIZE; i++) {
-    for (const id of playerIds) {
+/**
+ * Deals `handSize` consecutive cards to each player from the top of `pile`.
+ * Hands are dealt as whole blocks (not one card at a time around the table) so
+ * each one keeps the difficulty blend the pile was mixed with.
+ */
+export function createGame(playerIds: readonly string[], pile: readonly Phrase[], handSize: number = HAND_SIZE): Game {
+  const game: Game = { handSize, players: {}, pile: pile.map(toPhrase), accusation: null, winnerId: null };
+  for (const id of playerIds) {
+    const player = newPlayer(id);
+    for (let i = 0; i < handSize; i++) {
       const card = draw(game);
-      if (card) game.players[id].hand.push(card);
+      if (card) player.hand.push(card);
     }
+    game.players[id] = player;
   }
   return game;
 }
@@ -180,7 +192,7 @@ export function addPlayer(game: Game, playerId: string): Game {
   if (game.players[playerId]) return game;
   const next = clone(game);
   const player = newPlayer(playerId);
-  for (let i = 0; i < HAND_SIZE; i++) {
+  for (let i = 0; i < (next.handSize ?? HAND_SIZE); i++) {
     const card = draw(next);
     if (card) player.hand.push(card);
   }
@@ -249,7 +261,7 @@ export function applyAction(current: Game, action: Action): Result {
       if (accusedNow && !isCleared(card, game.accusation!.at)) return fail('accusation-pending');
       if (!isCleared(card, action.now)) return fail('timer-running');
       player.hand.splice(i, 1);
-      const phrase = { id: card.id, text: card.text };
+      const phrase = toPhrase(card);
       player.smuggled.push(phrase);
       events.push({ type: 'smuggled', playerId: player.id, phrase });
       checkWin(game, player.id, events);

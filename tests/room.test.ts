@@ -16,7 +16,7 @@ function must(room: Room | null, deviceId: string, msg: ClientMessage, now = T0)
   return out.room!;
 }
 const hello = (deviceId: string, name: string, create = false): ClientMessage =>
-  ({ t: 'hello', v: 1, deviceId, name, ...(create ? { create: { packs: ['core'] } } : {}) });
+  ({ t: 'hello', v: 2, deviceId, name, ...(create ? { create: { packs: ['core'] } } : {}) });
 
 function lobby(): Room {
   let room = must(null, 'dev-a', hello('dev-a', 'Ada', true));
@@ -55,6 +55,25 @@ describe('rooms', () => {
     expect(playing.phase).toBe('playing');
     const ids = Object.values(playing.game!.players).flatMap((p) => p.hand.map((c) => c.id));
     expect(new Set(ids).size).toBe(3 * HAND_SIZE);
+  });
+
+  it('lets the host set phrase count and spiciness, clamped to sane values', () => {
+    let room = must(null, 'dev-a', { t: 'hello', v: 2, deviceId: 'dev-a', name: 'Ada', create: { packs: ['core'], handSize: 7, spice: 4 } });
+    expect(room.settings).toEqual({ handSize: 7, spice: 4 });
+    room = must(room, 'dev-b', hello('dev-b', 'Bo'));
+    expect(send(room, 'dev-b', { t: 'configure', options: { packs: ['core'], handSize: 3 } }).error?.code).toBe('not-host');
+    room = must(room, 'dev-a', { t: 'configure', options: { packs: ['core', 'travel', 'bogus'], handSize: 99, spice: 0 } });
+    expect(room.settings).toEqual({ handSize: 8, spice: 1 });
+    expect(room.packs).toEqual(['core', 'travel']);
+    room = must(room, 'dev-a', { t: 'configure', options: { packs: ['core'], handSize: 4, spice: 5 } });
+    room = must(room, 'dev-a', { t: 'start' });
+    expect(view(room, 'dev-b').you.hand).toHaveLength(4);
+    expect(view(room, 'dev-b').settings).toEqual({ handSize: 4, spice: 5 });
+    expect(send(room, 'dev-a', { t: 'configure', options: { packs: ['core'], spice: 1 } }).error?.code).toBe('wrong-phase');
+    // Inferno: the dealt hands lean hard but are still a mix overall.
+    const heats = Object.values(room.game!.players).flatMap((p) => p.hand.map((c) => c.heat));
+    expect(heats.filter((h) => h === 3).length).toBeGreaterThan(heats.length / 2);
+    expect(new Set([...heats, ...room.game!.pile.slice(0, 20).map((p) => p.heat)]).size).toBe(3);
   });
 
   it('shows each device only its own phrases', () => {

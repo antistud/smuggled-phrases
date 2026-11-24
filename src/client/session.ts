@@ -9,12 +9,14 @@ import {
   PROTOCOL_VERSION,
   type Announcement,
   type ClientMessage,
+  type RoomOptions,
   type RoomPhase,
   type RoomView,
   type ScoreRow,
   type ServerMessage,
 } from '../shared/protocol';
 import { applyAction, type Accusation, type Action, type Card, type Game } from '../shared/rules';
+import { DEFAULT_SETTINGS, normalizeSettings, type GameSettings } from '../shared/settings';
 import { deviceId, load, save } from './storage';
 
 export type Connection = 'local' | 'online' | 'connecting';
@@ -23,6 +25,7 @@ export interface SessionState {
   mode: 'offline' | 'sync';
   code: string;
   packs: string[];
+  settings: GameSettings;
   phase: RoomPhase;
   connection: Connection;
   you: { id: string; name: string; hand: Card[]; badges: number; swapCredits: number; smuggled: Phrase[]; seized: number };
@@ -91,6 +94,7 @@ export abstract class Session {
   cancelAccusation(): void {}
   start(): void {}
   again(): void {}
+  configure(_options: RoomOptions): void {}
   kick(_playerId: string): void {}
 }
 
@@ -99,6 +103,7 @@ export abstract class Session {
 interface OfflineSave {
   code: string;
   packs: string[];
+  settings?: GameSettings;
   playerNumber: number;
   game: Game;
 }
@@ -113,8 +118,8 @@ export class OfflineSession extends Session {
     this.state = this.view();
   }
 
-  static create(code: string, packs: string[], playerNumber: number): OfflineSession {
-    const session = new OfflineSession({ code, packs, playerNumber, game: createOfflineGame(code, packs, playerNumber) });
+  static create(code: string, packs: string[], playerNumber: number, settings: GameSettings): OfflineSession {
+    const session = new OfflineSession({ code, packs, settings, playerNumber, game: createOfflineGame(code, packs, playerNumber, settings) });
     session.persist();
     return session;
   }
@@ -131,12 +136,14 @@ export class OfflineSession extends Session {
 
   private view(): SessionState {
     const { code, packs, playerNumber, game } = this.data;
+    const settings = normalizeSettings(this.data.settings);
     const me = game.players[OFFLINE_PLAYER_ID];
     const name = `Player ${playerNumber}`;
     return {
       mode: 'offline',
       code,
       packs,
+      settings,
       phase: game.winnerId ? 'over' : 'playing',
       connection: 'local',
       you: { id: me.id, name, hand: me.hand, badges: me.badges, swapCredits: me.swapCredits, smuggled: me.smuggled, seized: me.seized.length },
@@ -146,7 +153,7 @@ export class OfflineSession extends Session {
       accusation: null,
       winner: game.winnerId ? { id: me.id, name, phrases: me.smuggled } : null,
       playerNumber,
-      manifest: manifestNumber(code, packs),
+      manifest: manifestNumber(code, packs, settings),
     };
   }
 
@@ -211,7 +218,7 @@ export class SyncSession extends Session {
   state: SessionState;
   private data: SyncSave;
   private ws: WebSocket | null = null;
-  private create: { packs: string[] } | null;
+  private create: RoomOptions | null;
   private closed = false;
   private retry = 0;
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -219,7 +226,7 @@ export class SyncSession extends Session {
   private pongTimer: ReturnType<typeof setTimeout> | undefined;
   private failures = 0;
 
-  private constructor(data: SyncSave, create: { packs: string[] } | null) {
+  private constructor(data: SyncSave, create: RoomOptions | null) {
     super();
     this.data = data;
     this.create = create;
@@ -230,8 +237,8 @@ export class SyncSession extends Session {
     this.connect();
   }
 
-  static host(name: string, packs: string[]): SyncSession {
-    return new SyncSession({ code: randomCode(), name, view: null, offset: 0 }, { packs });
+  static host(name: string, packs: string[], settings: GameSettings): SyncSession {
+    return new SyncSession({ code: randomCode(), name, view: null, offset: 0 }, { packs, ...settings });
   }
   static join(code: string, name: string): SyncSession {
     return new SyncSession({ code, name, view: null, offset: 0 }, null);
@@ -252,6 +259,7 @@ export class SyncSession extends Session {
       mode: 'sync',
       code: this.data.code,
       packs: v?.packs ?? this.create?.packs ?? [],
+      settings: normalizeSettings(v?.settings ?? this.create ?? DEFAULT_SETTINGS),
       phase: v?.phase ?? 'lobby',
       connection,
       you: {
@@ -428,6 +436,7 @@ export class SyncSession extends Session {
   cancelAccusation() { this.send({ t: 'cancelAccusation' }); }
   start() { this.send({ t: 'start' }); }
   again() { this.send({ t: 'again' }); }
+  configure(options: RoomOptions) { this.send({ t: 'configure', options }); }
   kick(playerId: string) { this.send({ t: 'kick', playerId }); }
 
   leave() {

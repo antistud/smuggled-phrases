@@ -3,7 +3,7 @@
  * messages map onto the shared rules engine. Pure: the Durable Object in
  * worker/ only adds sockets and storage around these functions.
  */
-import { buildDeck, normalizePackIds, type Phrase } from './packs';
+import { buildDeck, normalizePackIds, TIERS, type Phrase, type TieredDeck } from './packs';
 import { shuffle } from './prng';
 import {
   MAX_NAME_LENGTH,
@@ -14,6 +14,7 @@ import {
   type RoomView,
   type ServerErrorCode,
 } from './protocol';
+import { mixPile, normalizeSettings, type GameSettings } from './settings';
 import { addPlayer, applyAction, createGame, removePlayer, type Action, type Game, type GameEvent } from './rules';
 
 export interface Member {
@@ -29,6 +30,7 @@ export interface Room {
   phase: RoomPhase;
   hostId: string;
   packs: string[];
+  settings: GameSettings;
   members: Member[];
   game: Game | null;
   /** Monotonic counter for public ids. */
@@ -66,8 +68,12 @@ function nameOf(room: Room, id: string | null | undefined): string | null {
   return room.members.find((m) => m.id === id)?.name ?? null;
 }
 
-function freshPile(packs: string[], rand: () => number): Phrase[] {
-  return shuffle(buildDeck(packs), rand);
+/** A new server-side pile: every tier shuffled, then woven to the room's spiciness. */
+function freshPile(room: Room, rand: () => number): Phrase[] {
+  const deck = buildDeck(room.packs);
+  const shuffled = {} as TieredDeck;
+  for (const tier of TIERS) shuffled[tier] = shuffle(deck[tier], rand);
+  return mixPile(shuffled, room.settings.spice, rand);
 }
 
 function toNews(room: Room, events: GameEvent[]): Announcement[] {
@@ -105,7 +111,16 @@ export function handleMessage(
       if (!msg.create) return fail('room-not-found');
       const host: Member = { id: 'p1', deviceId, name };
       return {
-        room: { code, phase: 'lobby', hostId: host.id, packs: normalizePackIds(msg.create.packs ?? []), members: [host], game: null, seq: 1 },
+        room: {
+          code,
+          phase: 'lobby',
+          hostId: host.id,
+          packs: normalizePackIds(msg.create.packs ?? []),
+          settings: normalizeSettings(msg.create),
+          members: [host],
+          game: null,
+          seq: 1,
+        },
         news: [],
       };
     }
@@ -149,8 +164,16 @@ export function handleMessage(
       if (msg.t === 'start' && room.phase !== 'lobby') return fail('wrong-phase');
       if (room.members.length < 2) return fail('need-players');
       const next = structuredCloneRoom(room);
-      next.game = createGame(next.members.map((m) => m.id), freshPile(next.packs, rand));
+      next.game = createGame(next.members.map((m) => m.id), freshPile(next, rand), next.settings.handSize);
       next.phase = 'playing';
+      return { room: next, news: [] };
+    }
+    case 'configure': {
+      if (!isHost) return fail('not-host');
+      if (room.phase === 'playing') return fail('wrong-phase');
+      const next = structuredCloneRoom(room);
+      next.packs = normalizePackIds(msg.options?.packs ?? room.packs);
+      next.settings = normalizeSettings({ ...room.settings, ...msg.options });
       return { room: next, news: [] };
     }
     case 'declare':
@@ -203,6 +226,7 @@ export function viewFor(room: Room, deviceId: string, connected: ReadonlySet<str
     phase: room.phase,
     hostId: room.hostId,
     packs: room.packs,
+    settings: room.settings,
     pileCount: game?.pile.length ?? 0,
     players: room.members.map((m) => {
       const p = game?.players[m.id];

@@ -12,7 +12,7 @@ The app only manages hands, timers and scoring; all of the play happens out loud
 
 ## How to play
 
-1. Everyone starts with **5 secret phrases**.
+1. Everyone starts with **5 secret phrases** (the host can choose 3 to 8, and how spicy they are).
 2. Say a phrase out loud in conversation, then tap **I said it** on that card. A private 30-second countdown starts.
 3. If nobody calls it in 30 seconds, shout **"Smuggled!"**, show the card and stamp it out of your hand.
 4. To catch someone, shout **"Contraband!"** inside the 30 seconds **and repeat the phrase**. Pointing at a person is not enough.
@@ -21,13 +21,39 @@ The app only manages hands, timers and scoring; all of the play happens out loud
 7. First player with an empty hand wins.
 8. Phrases must be spoken aloud. Close paraphrases of long phrases count.
 
+## Game settings
+
+The host of a room (or everyone, in an offline game) chooses three things:
+
+- **Phrase packs.** The main crate has 1,176 phrases; the bonus travel crate adds 40.
+- **Phrases each.** 3 to 8 to start with. Fewer is a quick round, more is a long con.
+- **Spiciness.** Every phrase is rated easy, medium or hard to slip into conversation, shown as
+  one to three chillies on the card. A level is never one difficulty: it sets the blend.
+
+| Spiciness | Easy | Medium | Hard |
+| --- | --- | --- | --- |
+| 1 Mild | 65% | 25% | 10% |
+| 2 Medium (default) | 50% | 35% | 15% |
+| 3 Hot | 30% | 40% | 30% |
+| 4 Extra hot | 15% | 35% | 50% |
+| 5 Inferno | 10% | 25% | 65% |
+
+The draw pile is woven to those percentages evenly from top to bottom (and never puts three of
+the same difficulty in a row), so every starting hand is a mix, even a hand of three, and the
+replacement and penalty draws keep to the same blend. In a synced room the host can change all of
+this in the lobby. The table lives in `SPICE_LEVELS` in `src/shared/settings.ts`.
+
+![Settings](docs/settings.png)
+
 ## Two ways to play
 
 **Offline (no network at all).** One player makes a 4-letter code; everyone types it in and picks a
 unique player number (1-10). Each phone shuffles the same deck with a PRNG seeded from the code and
 takes only its own stripe of it, so no two phones ever hold the same phrase and replacement draws
 never collide. Scoring is on the honor system. A 3-digit "manifest check" number lets the table
-confirm everyone typed the same code and picked the same packs.
+confirm everyone typed the same code and picked the same packs and settings. Each difficulty
+tier is striped separately before a phone mixes its own pile, so hands stay collision-free even
+if someone picks the wrong spiciness.
 
 **Synced rooms (online).** The host opens a room; others join by code, link or QR. The server owns
 the deck and every draw. You get a live scoreboard, a **Contraband!** button that names the accused
@@ -51,10 +77,11 @@ state is persisted locally, and synced phones reconnect on their own.
 
 ```
 src/
-  packs/            phrase decks (JSON)            <- core.json is the 300+ phrase deck
+  packs/            phrase decks (JSON)            <- core.json is the 1,176 phrase deck
   shared/           pure game logic, no DOM, no network
     rules.ts        the rules engine (reducer: game + action -> game + events)
     deal.ts         seeded shuffle and per-player stripes for offline mode
+    settings.ts     hand size, spiciness levels and the difficulty mixing
     prng.ts         hash, mulberry32, shuffle, game codes
     packs.ts        pack registry and deck building
     room.ts         synced room logic: members, host, messages -> rules actions, per-player views
@@ -119,9 +146,16 @@ A pack is a JSON file in `src/packs/`:
   "description": "Not for the family table.",
   "rating": "adult",
   "version": 1,
-  "phrases": ["...", "..."]
+  "phrases": {
+    "easy": ["short, nearly normal things", "..."],
+    "medium": ["odd noun phrases and short absurd sentences", "..."],
+    "hard": ["Long, specific sentences that are hard to say with a straight face.", "..."]
+  }
 }
 ```
+
+A pack works best with a healthy number of phrases in every tier, since each spiciness level draws
+from all three.
 
 Register it in `PACKS` in `src/shared/packs.ts` and it appears in the host's pack picker in both
 modes (`"rating": "adult"` is labelled 18+). Bump `version` whenever you edit a pack, so offline
@@ -151,7 +185,7 @@ laid over the top and never receives input.
   has no vibration API, so there the card turns green instead. The screen is kept awake while a
   countdown runs (where Wake Lock is supported); if the phone was locked anyway, the buzz comes
   when you unlock it.
-- **Offline mode** supports up to 10 players and gives each about 30 phrases. Player numbers must
+- **Offline mode** supports up to 10 players and gives each about 117 phrases from the main crate. Player numbers must
   be unique; the app cannot check that without a network.
 - **Synced rooms** hold up to 12 players and close after 6 hours without activity. Players are a
   display name plus a random per-device id; there are no accounts. Late arrivals are dealt in.

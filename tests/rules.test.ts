@@ -16,7 +16,7 @@ import {
   type Game,
 } from '../src/shared/rules';
 
-const pile = (n: number): Phrase[] => Array.from({ length: n }, (_, i) => ({ id: `t:${i}`, text: `phrase ${i}` }));
+const pile = (n: number): Phrase[] => Array.from({ length: n }, (_, i) => ({ id: `t:${i}`, text: `phrase ${i}`, heat: ((i % 3) + 1) as 1 | 2 | 3 }));
 const T0 = 1_000_000;
 
 function ok(game: Game, action: Action) {
@@ -42,6 +42,15 @@ describe('setup', () => {
     expect(new Set(allCardIds(g)).size).toBe(15);
     expect(g.pile).toHaveLength(25);
     expect(g.pile.some((p) => allCardIds(g).includes(p.id))).toBe(false);
+  });
+
+  it('deals the chosen hand size, as one block per player, and remembers it for late joiners', () => {
+    let g = createGame(['a', 'b'], pile(40), 7);
+    expect(g.players.a.hand.map((c) => c.id)).toEqual(['t:0', 't:1', 't:2', 't:3', 't:4', 't:5', 't:6']);
+    expect(g.players.b.hand.map((c) => c.id)).toEqual(['t:7', 't:8', 't:9', 't:10', 't:11', 't:12', 't:13']);
+    g = addPlayer(g, 'c');
+    expect(g.players.c.hand).toHaveLength(7);
+    expect(createGame(['a'], pile(40), 3).players.a.hand).toHaveLength(3);
   });
 
   it('deals a late joiner in from the pile and can remove a player', () => {
@@ -93,9 +102,9 @@ describe('saying a phrase (rules 2 and 3)', () => {
     g = ok(g, { type: 'declare', playerId: 'a', cardId: card.id, now: T0 }).game;
     const r = ok(g, { type: 'smuggle', playerId: 'a', cardId: card.id, now: T0 + TIMER_MS });
     expect(r.game.players.a.hand).toHaveLength(HAND_SIZE - 1);
-    expect(r.game.players.a.smuggled).toEqual([{ id: card.id, text: card.text }]);
+    expect(r.game.players.a.smuggled).toEqual([{ id: card.id, text: card.text, heat: card.heat }]);
     expect(r.game.pile).toHaveLength(g.pile.length);
-    expect(r.events).toContainEqual({ type: 'smuggled', playerId: 'a', phrase: { id: card.id, text: card.text } });
+    expect(r.events).toContainEqual({ type: 'smuggled', playerId: 'a', phrase: { id: card.id, text: card.text, heat: card.heat } });
   });
 
   it('lets a mis-tap be undone', () => {

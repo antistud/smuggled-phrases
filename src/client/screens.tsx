@@ -2,7 +2,8 @@
 import qrcode from 'qrcode-generator';
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { manifestNumber, MAX_OFFLINE_PLAYERS } from '../shared/deal';
-import { DEFAULT_PACK_IDS, getPack, PACKS } from '../shared/packs';
+import { DEFAULT_PACK_IDS, getPack, PACKS, packSize, TIERS } from '../shared/packs';
+import { DEFAULT_SETTINGS, MAX_HAND_SIZE, MIN_HAND_SIZE, SPICE_LEVELS, spiceLevel, type GameSettings } from '../shared/settings';
 import { CODE_LENGTH, normalizeCode, randomCode } from '../shared/prng';
 import { MAX_NAME_LENGTH } from '../shared/protocol';
 import { randomAlias, rankFor, rapSheet, SAMPLE_PHRASES } from './flavor';
@@ -115,7 +116,7 @@ function PackPicker(props: { value: string[]; onChange: (ids: string[]) => void 
         <button key={pack.id} class="pack" aria-pressed={props.value.includes(pack.id)} onClick={() => toggle(pack.id)}>
           <span class="tick">{props.value.includes(pack.id) ? '✓' : ''}</span>
           <span>
-            <strong>{pack.name}</strong> · {pack.phrases.length} phrases{pack.rating === 'adult' ? ' · 18+' : ''}
+            <strong>{pack.name}</strong> · {packSize(pack)} phrases{pack.rating === 'adult' ? ' · 18+' : ''}
             <small>{pack.description}</small>
           </span>
         </button>
@@ -124,11 +125,70 @@ function PackPicker(props: { value: string[]; onChange: (ids: string[]) => void 
   );
 }
 
+export function Chillies(props: { count: number }) {
+  return (
+    <span class="chillies" role="img" aria-label={`Spiciness ${props.count}`}>
+      {'🌶️'.repeat(props.count)}
+    </span>
+  );
+}
+
+/** Hand size and spiciness, with the easy / medium / hard split drawn as a bar. */
+function SettingsPicker(props: { value: GameSettings; onChange: (s: GameSettings) => void }) {
+  const { handSize, spice } = props.value;
+  const level = spiceLevel(spice);
+  const set = (patch: Partial<GameSettings>) => {
+    sfx.flick();
+    props.onChange({ ...props.value, ...patch });
+  };
+  return (
+    <>
+      <div class="field">
+        <span class="label">Phrases each</span>
+        <div class="numgrid six" role="group" aria-label="Phrases each">
+          {Array.from({ length: MAX_HAND_SIZE - MIN_HAND_SIZE + 1 }, (_, i) => i + MIN_HAND_SIZE).map((n) => (
+            <button key={n} aria-pressed={handSize === n} onClick={() => set({ handSize: n })}>{n}</button>
+          ))}
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">Spiciness: {level.name}</span>
+        <div class="spice" role="group" aria-label="Spiciness">
+          {SPICE_LEVELS.map((s) => (
+            <button key={s.level} aria-pressed={spice === s.level} aria-label={`${s.name}: ${s.mix.easy}% easy, ${s.mix.medium}% medium, ${s.mix.hard}% hard`} onClick={() => set({ spice: s.level })}>
+              <span class={s.level <= spice ? 'lit' : ''}>🌶️</span>
+            </button>
+          ))}
+        </div>
+        <div class="mix" aria-hidden="true">
+          {TIERS.map((tier) => (
+            <i key={tier} class={tier} style={{ flexGrow: level.mix[tier] }}>
+              {level.mix[tier]}%
+            </i>
+          ))}
+        </div>
+        <div class="mixkey" aria-hidden="true">
+          <span>easy</span>
+          <span>medium</span>
+          <span>hard</span>
+        </div>
+        <p class="marker spiceblurb">{level.blurb}</p>
+      </div>
+    </>
+  );
+}
+
+function settingsSummary(s: GameSettings): string {
+  const level = spiceLevel(s.spice);
+  return `${s.handSize} phrases each · ${level.name} (${level.mix.easy}/${level.mix.medium}/${level.mix.hard})`;
+}
+
 export function Setup(props: { kind: 'create' | 'join'; code?: string; forceSync?: boolean; onBack: () => void; onSession: (s: Session) => void }) {
   const creating = props.kind === 'create';
   const [mode, setMode] = useState<'sync' | 'offline'>(props.forceSync || navigator.onLine ? 'sync' : 'offline');
   const [name, setName] = useState(() => load<string>('name') ?? '');
   const [packs, setPacks] = useState<string[]>(DEFAULT_PACK_IDS);
+  const [settings, setSettings] = useState<GameSettings>(() => ({ ...DEFAULT_SETTINGS, ...(load<GameSettings>('settings') ?? {}) }));
   const [code, setCode] = useState(() => (creating ? randomCode() : props.code ?? ''));
   const [number, setNumber] = useState<number | null>(null);
 
@@ -137,11 +197,12 @@ export function Setup(props: { kind: 'create' | 'join'; code?: string; forceSync
 
   const go = () => {
     if (!ready) return;
+    save('settings', settings);
     if (mode === 'sync') {
       save('name', name.trim());
-      props.onSession(creating ? SyncSession.host(name.trim(), packs) : SyncSession.join(validCode, name.trim()));
+      props.onSession(creating ? SyncSession.host(name.trim(), packs, settings) : SyncSession.join(validCode, name.trim()));
     } else {
-      props.onSession(OfflineSession.create(validCode, packs, number!));
+      props.onSession(OfflineSession.create(validCode, packs, number!, settings));
     }
   };
 
@@ -217,9 +278,12 @@ export function Setup(props: { kind: 'create' | 'join'; code?: string; forceSync
           </div>
         )}
 
+        {(creating || mode === 'offline') && <SettingsPicker value={settings} onChange={setSettings} />}
+        {!creating && mode === 'offline' && <p class="muted" style="font-size:.88rem">Pick the same packs, phrase count and spiciness as the host.</p>}
+
         {mode === 'offline' && validCode && (
           <p class="note">
-            Manifest check <strong>#{manifestNumber(validCode, packs)}</strong>. Everyone should see the same number before you play.
+            Manifest check <strong>#{manifestNumber(validCode, packs, settings)}</strong>. Everyone should see the same number before you play.
           </p>
         )}
 
@@ -283,8 +347,19 @@ export function Lobby(props: { session: Session; state: SessionState; onLeave: (
           </ul>
         </div>
         <p class="muted" style="font-size:.9rem;text-align:center">
-          Packs: {state.packs.map((id) => getPack(id)?.name ?? id).join(' + ') || '…'}
+          {state.packs.map((id) => getPack(id)?.name ?? id).join(' + ') || '…'}
+          <br />
+          {settingsSummary(state.settings)} <Chillies count={state.settings.spice} />
         </p>
+        {isHost && (
+          <details class="tune">
+            <summary>Change the job</summary>
+            <div class="stack" style="gap:14px;margin-top:12px">
+              <SettingsPicker value={state.settings} onChange={(next) => session.configure({ packs: state.packs, ...next })} />
+              <PackPicker value={state.packs} onChange={(packs) => session.configure({ packs, ...state.settings })} />
+            </div>
+          </details>
+        )}
         {isHost ? (
           <button class="btn amber" disabled={state.players.length < 2 || state.connection !== 'online'} onClick={() => session.start()}>
             {state.players.length < 2 ? 'Waiting for the crew…' : 'Deal the contraband'}
@@ -310,7 +385,7 @@ export function Scoreboard(props: { session: Session; state: SessionState; onClo
       <div class="paper">
         <div class="paper-head">
           <span>Game {state.code}</span>
-          <span>{state.mode === 'sync' ? `${state.pileCount} in the crate` : `Player ${state.playerNumber} · check #${state.manifest}`}</span>
+          <span>{state.mode === 'sync' ? `${spiceLevel(state.settings.spice).name} · ${state.pileCount} in the crate` : `Player ${state.playerNumber} · check #${state.manifest}`}</span>
         </div>
         <table class="scores">
           <thead>
@@ -411,7 +486,7 @@ export function HowTo(props: { onBack: () => void }) {
       <TopBar title="How to play" onBack={props.onBack} />
       <p class="tagline" style="margin:0 0 14px">Talk normal. Smuggle nonsense. Don’t get searched.</p>
       <ol class="rules">
-        <li class="paper">You start with <b>5 secret phrases</b>. Keep your phone to yourself.</li>
+        <li class="paper">You start with <b>5 secret phrases</b> (the host can pick 3 to 8, and how spicy they are). Keep your phone to yourself.</li>
         <li class="paper">Work a phrase into the conversation <b>out loud</b>, then tap <b>I said it</b> on that card. A private 30-second countdown starts.</li>
         <li class="paper">If nobody calls it in 30 seconds, shout <b>“Smuggled!”</b>, show the card, and clear it from your hand.</li>
         <li class="paper">Think someone just smuggled? Shout <b>“Contraband!”</b> within the 30 seconds <b>and repeat the phrase</b>. Pointing at a person is not enough.</li>

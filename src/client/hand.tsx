@@ -51,7 +51,10 @@ function CardView(props: { card: Card; index: number; clock: number; paused: boo
   return (
     <div class={`paper card ${state}`} style={style}>
       <div class="paper-head">
-        <span>Item {String(props.index + 1).padStart(2, '0')}</span>
+        <span>
+          Item {String(props.index + 1).padStart(2, '0')}
+          {card.heat ? <span class="heat" role="img" aria-label={['', 'Easy', 'Medium', 'Hard'][card.heat]}> {'🌶️'.repeat(card.heat)}</span> : null}
+        </span>
         <span>{done ? 'Cleared: shout “Smuggled!”' : live ? (props.paused ? 'Clock stopped' : 'Under inspection') : 'Goods to declare'}</span>
       </div>
       <div class="body">

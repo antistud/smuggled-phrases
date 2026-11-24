@@ -1,14 +1,22 @@
 /** Wire protocol between the app and a room. JSON over one WebSocket. */
 import type { Phrase } from './packs';
 import type { Accusation, Card } from './rules';
+import type { GameSettings } from './settings';
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 export const MAX_ROOM_PLAYERS = 12;
 export const MAX_NAME_LENGTH = 16;
 
+/** What the host chooses for a room. */
+export interface RoomOptions extends Partial<GameSettings> {
+  packs: string[];
+}
+
 export type ClientMessage =
   /** First message on every (re)connection. `create` opens a new room. */
-  | { t: 'hello'; v: number; deviceId: string; name: string; create?: { packs: string[] } }
+  | { t: 'hello'; v: number; deviceId: string; name: string; create?: RoomOptions }
+  /** Host, in the lobby: change packs, hand size or spiciness. */
+  | { t: 'configure'; options: RoomOptions }
   | { t: 'start' }
   | { t: 'declare'; cardId: string }
   | { t: 'undeclare'; cardId: string }
@@ -38,6 +46,7 @@ export interface RoomView {
   phase: RoomPhase;
   hostId: string;
   packs: string[];
+  settings: GameSettings;
   pileCount: number;
   players: ScoreRow[];
   you: {
