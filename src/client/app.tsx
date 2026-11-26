@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { normalizeCode } from '../shared/prng';
 import type { Announcement } from '../shared/protocol';
-import { addToRapSheet } from './flavor';
+import { account, errorText } from './account';
+import { recordProgress } from './flavor';
 import { fx } from './fx';
 import { Hand } from './hand';
-import { HowTo, Home, Lobby, Scoreboard, Setup, Win } from './screens';
+import { AccountScreen, HowTo, Home, Lobby, RulesSheet, Scoreboard, Setup, Win } from './screens';
 import { restoreSession, type Session } from './session';
+import { load, save } from './storage';
 import { sfx } from './sfx';
 import { buzz, Toasts, useSession, type Toast } from './ui';
 
-type Route = { name: 'home' } | { name: 'setup'; kind: 'create' | 'join'; code?: string; forceSync?: boolean } | { name: 'howto'; back: Route } | { name: 'game' };
+type Route = { name: 'home' } | { name: 'setup'; kind: 'create' | 'join'; code?: string; forceSync?: boolean } | { name: 'howto'; back: Route } | { name: 'game' } | { name: 'account' };
 
 /** ?room=CODE from an invite link or QR code. */
 function invitedRoom(): string {
@@ -30,6 +32,8 @@ function describe(a: Announcement): Omit<Toast, 'id'> {
       return { body: <>The host voided that call.</> };
     case 'joined':
       return { body: <>{a.name} joined the room.</> };
+    case 'renamed':
+      return { body: <>{a.from} now goes by {a.name}.</> };
     case 'left':
       return { body: <>{a.name} left the room.</> };
   }
@@ -54,6 +58,24 @@ export function App() {
     setToasts((list) => [...list.slice(-2), { ...t, id }]);
     setTimeout(() => setToasts((list) => list.filter((x) => x.id !== id)), 4200);
   };
+
+  // Arriving from the emailed sign-in link: /?login=<token>.
+  useEffect(() => {
+    const token = new URLSearchParams(location.search).get('login');
+    if (token) {
+      history.replaceState(null, '', location.pathname);
+      void account.verify({ token }).then((result) => {
+        if (result.ok) {
+          sfx.thud();
+          toast({ stamp: { text: 'Cleared', green: true }, body: <>Signed in as {account.current?.email}.</> });
+        } else {
+          toast({ stamp: { text: 'Denied' }, body: <>{errorText(result.error)}</> });
+        }
+      });
+    } else {
+      void account.refresh();
+    }
+  }, []);
 
   useEffect(() => {
     if (!session) return;
@@ -84,6 +106,8 @@ export function App() {
   let screen;
   if (route.name === 'howto') {
     screen = <HowTo onBack={() => setRoute(route.back)} />;
+  } else if (route.name === 'account') {
+    screen = <AccountScreen onBack={() => setRoute({ name: 'home' })} />;
   } else if (route.name === 'setup') {
     screen = <Setup kind={route.kind} code={route.code} forceSync={route.forceSync} onBack={() => setRoute({ name: 'home' })} onSession={adopt} />;
   } else if (route.name === 'game' && session) {
@@ -96,6 +120,7 @@ export function App() {
         onCreate={() => setRoute({ name: 'setup', kind: 'create' })}
         onJoin={() => setRoute({ name: 'setup', kind: 'join' })}
         onHowTo={() => setRoute({ name: 'howto', back: { name: 'home' } })}
+        onAccount={() => setRoute({ name: 'account' })}
       />
     );
   }
@@ -116,17 +141,31 @@ function Game(props: { session: Session; onLeave: () => void; onHome: () => void
   const state = useSession(session);
   const [scores, setScores] = useState(false);
 
-  const won = state.phase === 'over';
+  // First game on this phone: put the rules in front of the player as the hand is dealt.
+  const [rules, setRules] = useState(false);
   useEffect(() => {
-    if (won) {
-      buzz([100, 60, 100, 60, 500]);
-      fx.cash();
-      sfx.fanfare();
-      if (state.winner?.id === state.you.id) addToRapSheet({ getaways: 1 });
-      // The win screen says it all; don't bury it under announcements.
-      props.onOver();
-    }
-  }, [won]);
+    if (state.phase === 'playing' && !load<boolean>('rulesSeen')) setRules(true);
+  }, [state.phase]);
+  const closeRules = () => {
+    save('rulesSeen', true);
+    setRules(false);
+  };
+
+  // Celebrate, and count the result, only when the game ends while we are watching
+  // (not again every time a finished game is reopened).
+  const lastPhase = useRef(state.phase);
+  useEffect(() => {
+    const ended = state.phase === 'over' && lastPhase.current === 'playing';
+    lastPhase.current = state.phase;
+    if (!ended) return;
+    buzz([100, 60, 100, 60, 500]);
+    fx.cash();
+    sfx.fanfare();
+    // The win screen says it all; don't bury it under announcements.
+    props.onOver();
+    recordProgress(state.mode, { games: 1, getaways: state.winner?.id === state.you.id ? 1 : 0 });
+    if (state.mode === 'sync') setTimeout(() => void account.refresh(), 1500);
+  }, [state.phase]);
   useEffect(() => {
     if (state.phase !== 'playing') setScores(false);
   }, [state.phase]);
@@ -145,6 +184,7 @@ function Game(props: { session: Session; onLeave: () => void; onHome: () => void
   return (
     <>
       <Hand session={session} state={state} onScores={() => setScores(true)} />
+      {rules && <RulesSheet onClose={closeRules} />}
       {scores && <Scoreboard session={session} state={state} onClose={() => setScores(false)} onHowTo={props.onHowTo} onLeave={props.onLeave} />}
     </>
   );

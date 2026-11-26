@@ -1,5 +1,6 @@
 /** Jokes, aliases and ranks: everything that is flavour rather than rules. */
 import { hashString } from '../shared/prng';
+import { account } from './account';
 import { load, save } from './storage';
 
 const FIRST = ['Sticky', 'Two-Sock', 'Quiet', 'Slippery', 'Lucky', 'Velvet', 'Crumbs', 'Whispering', 'Dusty', 'Lefty', 'Smooth', 'Wobbly', 'Midnight', 'Biscuit', 'Shifty', 'Soggy', 'Honest', 'Fancy'];
@@ -59,6 +60,9 @@ export interface RapSheet {
   smuggled: number;
   seized: number;
   getaways: number;
+  busts?: number;
+  wrongCalls?: number;
+  games?: number;
 }
 export function rapSheet(): RapSheet {
   return { smuggled: 0, seized: 0, getaways: 0, ...(load<RapSheet>('rapsheet') ?? {}) };
@@ -69,7 +73,25 @@ export function addToRapSheet(delta: Partial<RapSheet>): void {
     smuggled: sheet.smuggled + (delta.smuggled ?? 0),
     seized: sheet.seized + (delta.seized ?? 0),
     getaways: sheet.getaways + (delta.getaways ?? 0),
+    busts: (sheet.busts ?? 0) + (delta.busts ?? 0),
+    wrongCalls: (sheet.wrongCalls ?? 0) + (delta.wrongCalls ?? 0),
+    games: (sheet.games ?? 0) + (delta.games ?? 0),
   });
 }
 
 export const SAMPLE_PHRASES = ['emergency lasagna', 'the squirrel council', 'That’s exactly what the raccoons want.', 'a submarine full of bees', 'The moon owes me money.', 'tactical oven mitts'];
+
+/**
+ * Records progress from the game on screen. Signed out: kept on this phone.
+ * Signed in: synced rooms are counted by the server itself, so only offline
+ * games are reported from here.
+ */
+export function recordProgress(mode: 'offline' | 'sync', delta: Partial<RapSheet>): void {
+  if (!account.current) addToRapSheet(delta);
+  else if (mode === 'offline') account.report(delta);
+}
+
+/** The record to show: the account's when signed in, this phone's otherwise. */
+export function currentRecord(): RapSheet {
+  return account.current?.stats ?? rapSheet();
+}

@@ -6,9 +6,9 @@
   "description": "Smuggled Phrases — an in-person party game. Nothing to declare. Plenty to say.",
   "scripts": {
     "dev": "vite",
-    "dev:worker": "wrangler dev",
+    "dev:worker": "wrangler dev --var DEV_MAGIC_LINKS:true",
     "build": "tsc --noEmit && vite build",
-    "preview": "npm run build && wrangler dev",
+    "preview": "npm run build && wrangler dev --var DEV_MAGIC_LINKS:true",
     "deploy": "npm run build && wrangler deploy",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",

@@ -16,7 +16,7 @@ function must(room: Room | null, deviceId: string, msg: ClientMessage, now = T0)
   return out.room!;
 }
 const hello = (deviceId: string, name: string, create = false): ClientMessage =>
-  ({ t: 'hello', v: 2, deviceId, name, ...(create ? { create: { packs: ['core'] } } : {}) });
+  ({ t: 'hello', v: 3, deviceId, name, ...(create ? { create: { packs: ['core'] } } : {}) });
 
 function lobby(): Room {
   let room = must(null, 'dev-a', hello('dev-a', 'Ada', true));
@@ -58,7 +58,7 @@ describe('rooms', () => {
   });
 
   it('lets the host set phrase count and spiciness, clamped to sane values', () => {
-    let room = must(null, 'dev-a', { t: 'hello', v: 2, deviceId: 'dev-a', name: 'Ada', create: { packs: ['core'], handSize: 7, spice: 4 } });
+    let room = must(null, 'dev-a', { t: 'hello', v: 3, deviceId: 'dev-a', name: 'Ada', create: { packs: ['core'], handSize: 7, spice: 4 } });
     expect(room.settings).toEqual({ handSize: 7, spice: 4 });
     room = must(room, 'dev-b', hello('dev-b', 'Bo'));
     expect(send(room, 'dev-b', { t: 'configure', options: { packs: ['core'], handSize: 3 } }).error?.code).toBe('not-host');
@@ -74,6 +74,55 @@ describe('rooms', () => {
     const heats = Object.values(room.game!.players).flatMap((p) => p.hand.map((c) => c.heat));
     expect(heats.filter((h) => h === 3).length).toBeGreaterThan(heats.length / 2);
     expect(new Set([...heats, ...room.game!.pile.slice(0, 20).map((p) => p.heat)]).size).toBe(3);
+  });
+
+  it('lets a player change their name at any time, keeping names unique', () => {
+    let room = lobby();
+    let out = send(room, 'dev-b', { t: 'rename', name: '  Sticky   Pete ' });
+    expect(out.news).toEqual([{ kind: 'renamed', from: 'Bo', name: 'Sticky Pete' }]);
+    room = out.room!;
+    expect(room.members[1].name).toBe('Sticky Pete');
+    room = must(room, 'dev-c', { t: 'rename', name: 'ADA' });
+    expect(room.members[2].name).toBe('ADA 2');
+    room = must(room, 'dev-a', { t: 'start' });
+    room = must(room, 'dev-b', { t: 'rename', name: 'Velvet Ferret With A Very Long Name' });
+    expect(view(room, 'dev-a').players[1].name).toBe('Velvet Ferret Wi');
+    out = send(room, 'dev-b', { t: 'rename', name: 'Velvet Ferret Wi' });
+    expect(out.news).toEqual([]);
+    expect(send(room, 'stranger', { t: 'rename', name: 'x' }).error?.code).toBe('not-in-room');
+  });
+
+  it('reports progress for each player as the game unfolds', () => {
+    let room = must(lobby(), 'dev-a', { t: 'start' });
+    const card = view(room, 'dev-a').you.hand[0];
+    room = must(room, 'dev-a', { t: 'declare', cardId: card.id });
+    room = must(room, 'dev-b', { t: 'accuse', accusedId: 'p1' }, T0 + 1000);
+    let out = send(room, 'dev-a', { t: 'resolve', cardId: card.id }, T0 + 2000);
+    expect(out.awards).toEqual([
+      { memberId: 'p1', delta: { seized: 1 } },
+      { memberId: 'p2', delta: { busts: 1 } },
+    ]);
+    room = must(out.room, 'dev-b', { t: 'swap', cardId: null });
+    room = must(room, 'dev-c', { t: 'accuse', accusedId: 'p2' });
+    out = send(room, 'dev-b', { t: 'resolve', cardId: null });
+    expect(out.awards).toEqual([{ memberId: 'p3', delta: { wrongCalls: 1 } }]);
+    room = out.room!;
+
+    let now = T0 + 10_000;
+    const hand = view(room, 'dev-b').you.hand;
+    for (const c of hand) room = must(room, 'dev-b', { t: 'declare', cardId: c.id }, now);
+    now += TIMER_MS;
+    for (const c of hand.slice(0, -1)) {
+      out = send(room, 'dev-b', { t: 'smuggle', cardId: c.id }, now);
+      expect(out.awards).toEqual([{ memberId: 'p2', delta: { smuggled: 1 } }]);
+      room = out.room!;
+    }
+    out = send(room, 'dev-b', { t: 'smuggle', cardId: hand[hand.length - 1].id }, now);
+    expect(out.awards).toEqual([
+      { memberId: 'p2', delta: { smuggled: 1, getaways: 1, games: 1 } },
+      { memberId: 'p1', delta: { games: 1 } },
+      { memberId: 'p3', delta: { games: 1 } },
+    ]);
   });
 
   it('shows each device only its own phrases', () => {

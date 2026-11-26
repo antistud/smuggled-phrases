@@ -1,7 +1,7 @@
 /** The main play screen: your stash of declaration forms, the dock, and every call flow. */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { clockFor, isCleared, isLive, remainingMs, TIMER_MS, type Card } from '../shared/rules';
-import { addToRapSheet, gloatFor, grimeFor, nervesFor } from './flavor';
+import { gloatFor, grimeFor, nervesFor, recordProgress } from './flavor';
 import { fx } from './fx';
 import type { Session, SessionState } from './session';
 import { sfx } from './sfx';
@@ -203,7 +203,7 @@ export function Hand(props: { session: Session; state: SessionState; onScores: (
   useEffect(() => {
     const smuggled = you.smuggled.length - tally.current.smuggled;
     const seized = you.seized - tally.current.seized;
-    if (smuggled > 0 || seized > 0) addToRapSheet({ smuggled: Math.max(0, smuggled), seized: Math.max(0, seized) });
+    if (smuggled > 0 || seized > 0) recordProgress(state.mode, { smuggled: Math.max(0, smuggled), seized: Math.max(0, seized) });
     tally.current = { smuggled: you.smuggled.length, seized: you.seized };
   }, [you.smuggled.length, you.seized]);
 
@@ -291,8 +291,8 @@ export function Hand(props: { session: Session; state: SessionState; onScores: (
       {calling && offline && (
         <Sheet title="You called Contraband!" onClose={() => setCalling(false)}>
           <p class="muted">You must have said the phrase you suspected, out loud, inside their 30 seconds. Did they admit it?</p>
-          <button class="btn green" onClick={() => { session.caughtSomeone(); setCalling(false); raid('Busted. Nice nose.'); }}>Yes, I caught them</button>
-          <button class="btn red" onClick={() => { session.wrongCall(); setCalling(false); sfx.buzzer(); fx.shake(true); buzz(120); }}>
+          <button class="btn green" onClick={() => { session.caughtSomeone(); recordProgress('offline', { busts: 1 }); setCalling(false); raid('Busted. Nice nose.'); }}>Yes, I caught them</button>
+          <button class="btn red" onClick={() => { session.wrongCall(); recordProgress('offline', { wrongCalls: 1 }); setCalling(false); sfx.buzzer(); fx.shake(true); buzz(120); }}>
             No, wrong call
           </button>
           <p class="muted" style="font-size:.88rem">A wrong call costs a badge and adds a phrase to your stash.</p>

@@ -14,6 +14,8 @@ import {
   type RoomView,
   type ServerErrorCode,
 } from './protocol';
+import type { StatDelta } from './account';
+import { cleanName } from './names';
 import { mixPile, normalizeSettings, type GameSettings } from './settings';
 import { addPlayer, applyAction, createGame, removePlayer, type Action, type Game, type GameEvent } from './rules';
 
@@ -23,6 +25,8 @@ export interface Member {
   /** Private per-device id. Never sent to anyone else. */
   deviceId: string;
   name: string;
+  /** Account key, set by the server once it has verified the player's sign-in. */
+  account?: string;
 }
 
 export interface Room {
@@ -44,11 +48,8 @@ export interface Outcome {
   error?: { code: ServerErrorCode; detail?: string };
   /** Device ids to disconnect after this message. */
   drop?: string[];
-}
-
-export function cleanName(raw: string): string {
-  const name = String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_NAME_LENGTH);
-  return name || 'Smuggler';
+  /** Changes to players' lifetime records, by public member id. */
+  awards?: { memberId: string; delta: StatDelta }[];
 }
 
 function uniqueName(room: Room, wanted: string, exceptId?: string): string {
@@ -74,6 +75,30 @@ function freshPile(room: Room, rand: () => number): Phrase[] {
   const shuffled = {} as TieredDeck;
   for (const tier of TIERS) shuffled[tier] = shuffle(deck[tier], rand);
   return mixPile(shuffled, room.settings.spice, rand);
+}
+
+/** What a batch of game events adds to each player's lifetime record. */
+export function toAwards(game: Game, events: GameEvent[]): { memberId: string; delta: StatDelta }[] {
+  const totals = new Map<string, StatDelta>();
+  const add = (memberId: string | null | undefined, key: keyof StatDelta) => {
+    if (!memberId) return;
+    const delta = totals.get(memberId) ?? {};
+    delta[key] = (delta[key] ?? 0) + 1;
+    totals.set(memberId, delta);
+  };
+  for (const e of events) {
+    if (e.type === 'smuggled') add(e.playerId, 'smuggled');
+    if (e.type === 'seized') {
+      add(e.playerId, 'seized');
+      add(e.catcherId, 'busts');
+    }
+    if (e.type === 'wrongCall') add(e.playerId, 'wrongCalls');
+    if (e.type === 'won') {
+      add(e.playerId, 'getaways');
+      for (const id of Object.keys(game.players)) add(id, 'games');
+    }
+  }
+  return [...totals].map(([memberId, delta]) => ({ memberId, delta }));
 }
 
 function toNews(room: Room, events: GameEvent[]): Announcement[] {
@@ -154,7 +179,7 @@ export function handleMessage(
     const next = structuredCloneRoom(room);
     next.game = result.game;
     if (result.game.winnerId) next.phase = 'over';
-    return { room: next, news: toNews(next, result.events) };
+    return { room: next, news: toNews(next, result.events), awards: toAwards(result.game, result.events) };
   };
 
   switch (msg.t) {
@@ -167,6 +192,13 @@ export function handleMessage(
       next.game = createGame(next.members.map((m) => m.id), freshPile(next, rand), next.settings.handSize);
       next.phase = 'playing';
       return { room: next, news: [] };
+    }
+    case 'rename': {
+      const next = structuredCloneRoom(room);
+      const member = memberOf(next, deviceId)!;
+      const before = member.name;
+      member.name = uniqueName(next, cleanName(msg.name), member.id);
+      return { room: next, news: member.name === before ? [] : [{ kind: 'renamed', from: before, name: member.name }] };
     }
     case 'configure': {
       if (!isHost) return fail('not-host');

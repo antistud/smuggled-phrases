@@ -17,6 +17,7 @@ import {
 } from '../shared/protocol';
 import { applyAction, type Accusation, type Action, type Card, type Game } from '../shared/rules';
 import { DEFAULT_SETTINGS, normalizeSettings, type GameSettings } from '../shared/settings';
+import { account } from './account';
 import { deviceId, load, save } from './storage';
 
 export type Connection = 'local' | 'online' | 'connecting';
@@ -94,6 +95,7 @@ export abstract class Session {
   cancelAccusation(): void {}
   start(): void {}
   again(): void {}
+  rename(_name: string): void {}
   configure(_options: RoomOptions): void {}
   kick(_playerId: string): void {}
 }
@@ -299,7 +301,7 @@ export class SyncSession extends Session {
     this.ws = ws;
     ws.onopen = () => {
       if (this.ws !== ws) return;
-      const hello: ClientMessage = { t: 'hello', v: PROTOCOL_VERSION, deviceId: deviceId(), name: this.data.name };
+      const hello: ClientMessage = { t: 'hello', v: PROTOCOL_VERSION, deviceId: deviceId(), name: this.data.name, session: account.session };
       if (this.create) hello.create = this.create;
       ws.send(JSON.stringify(hello));
       this.startHeartbeat();
@@ -436,6 +438,13 @@ export class SyncSession extends Session {
   cancelAccusation() { this.send({ t: 'cancelAccusation' }); }
   start() { this.send({ t: 'start' }); }
   again() { this.send({ t: 'again' }); }
+  rename(name: string) {
+    // Remembered so a reconnect does not put the old name back.
+    this.data.name = name;
+    save('sync', this.data);
+    save('name', name);
+    this.send({ t: 'rename', name });
+  }
   configure(options: RoomOptions) { this.send({ t: 'configure', options }); }
   kick(playerId: string) { this.send({ t: 'kick', playerId }); }
 

@@ -45,6 +45,24 @@ this in the lobby. The table lives in `SPICE_LEVELS` in `src/shared/settings.ts`
 
 ![Settings](docs/settings.png)
 
+## Accounts and progress
+
+Signing in is optional and has no password. A player types their email and gets a message with a
+sign-in link and a 6-digit code; either one works once, for 15 minutes. (The code is there because
+on an iPhone the link opens in Safari, not in the installed app.) Signed-in players get:
+
+- **A record kept on the server:** phrases smuggled and seized, smugglers caught, wrong calls,
+  clean getaways and games finished, with a rank that follows them to any phone.
+- **Counting done by the server.** In a synced room the room itself adds to each signed-in
+  player's record as things happen, so it cannot be faked from a phone. Offline games are reported
+  by the phone afterwards (queued until there is a connection, capped and de-duplicated), so that
+  part is on the honor system like the rest of offline play.
+- **Their alias remembered** and prefilled when they join.
+
+Guests still get the same record, kept on the phone only; it moves onto the account the first time
+they sign in. Anyone can change their name after joining, from the lobby or the scoreboard, and
+everyone is told. The rules pop up once, the first time a game is dealt on a phone.
+
 ## Two ways to play
 
 **Offline (no network at all).** One player makes a 4-letter code; everyone types it in and picks a
@@ -73,6 +91,7 @@ state is persisted locally, and synced phones reconnect on their own.
 | PWA | Web app manifest plus a small hand-written service worker that precaches every built file |
 | Rules | Pure TypeScript module shared by the app and the server |
 | Realtime | One Cloudflare Worker; one Durable Object per room, hibernating WebSockets |
+| Accounts | One Durable Object per email address; sign-in email sent through the Resend API |
 | Tests | Vitest |
 
 ```
@@ -85,6 +104,7 @@ src/
     prng.ts         hash, mulberry32, shuffle, game codes
     packs.ts        pack registry and deck building
     room.ts         synced room logic: members, host, messages -> rules actions, per-player views
+    account.ts      sign-in state machine (link, code, sessions, rate limits) and the lifetime record
     protocol.ts     WebSocket message types
   client/           the PWA
     session.ts      OfflineSession (local engine) and SyncSession (socket, reconnects)
@@ -94,7 +114,9 @@ src/
     flavor.ts       aliases, quips, ranks and the lifetime rap sheet
     screens.tsx     start, setup, lobby, scoreboard, win, how-to
     sw.js           service worker template (file list injected at build)
-worker/index.ts     Worker entry and the RoomObject Durable Object
+worker/index.ts     Worker entry, account API routes and the RoomObject Durable Object
+worker/accounts.ts  AccountObject Durable Object: hashing, storage, awards from rooms
+worker/mail.ts      the sign-in email
 tests/              rules, seeded deal, packs, room logic
 ```
 
@@ -104,7 +126,7 @@ Requires Node 20+.
 
 ```sh
 npm install
-npm test            # rules engine, seeded deal, packs, room logic
+npm test            # rules engine, seeded deal, packs, room logic, accounts
 npm run dev         # app on http://localhost:5173 (offline mode works on its own)
 npm run dev:worker  # in a second terminal: rooms on :8787, proxied from /api by Vite
 ```
@@ -114,6 +136,9 @@ To try the real thing, service worker included, on one port:
 ```sh
 npm run preview     # builds, then serves app + rooms from the local Worker on :8787
 ```
+
+Local runs start the Worker with `DEV_MAGIC_LINKS=true`: no email is sent, and the sign-in screen
+shows the code and link instead. Never set that variable on a deployed Worker.
 
 The service worker is only registered in production builds, so `npm run dev` never serves stale
 files. To test on phones over your LAN, note that installing a PWA and service workers need HTTPS
@@ -129,8 +154,35 @@ npx wrangler login
 npm run deploy      # vite build, then wrangler deploy
 ```
 
-`wrangler.jsonc` holds the config: assets from `dist/`, the `ROOMS` Durable Object binding and its
-migration. Add a `routes` entry or a custom domain in the Cloudflare dashboard if you want one.
+### Turning on email sign-in
+
+The game deploys and plays without this; only the sign-in screen needs it. Sign-in email goes
+through [Resend](https://resend.com) (free tier is plenty): add and verify your sending domain
+there, create an API key, then:
+
+```sh
+npx wrangler secret put RESEND_API_KEY        # paste the key when asked
+```
+
+and add the sender (and, if you use a custom domain, the public address) to `wrangler.jsonc`:
+
+```jsonc
+"vars": {
+  "MAIL_FROM": "Smuggled Phrases <login@yourdomain.com>",
+  "APP_ORIGIN": "https://play.yourdomain.com"
+}
+```
+
+`APP_ORIGIN` is the address put in sign-in links; without it the Worker uses the address the
+request arrived on. To use a different email provider, change the one `fetch` in `worker/mail.ts`.
+
+Security notes: link tokens, codes and sessions are stored only as SHA-256 hashes; a code locks
+after 5 wrong tries; each address gets at most one email every 45 seconds and 6 an hour; sessions
+last 180 days and are revoked by signing out. There is no per-IP rate limit, so if the sign-in
+endpoint is abused add a Cloudflare rate limiting rule on `/api/auth/request`.
+
+`wrangler.jsonc` holds the config: assets from `dist/`, the `ROOMS` and `ACCOUNTS` Durable Object bindings and their
+migrations. Add a `routes` entry or a custom domain in the Cloudflare dashboard if you want one.
 
 If you host the static app somewhere else, build with `VITE_API_BASE=https://your-worker.example`
 so the app knows where the rooms live. Offline mode needs no backend at all: any static host works.
@@ -188,7 +240,7 @@ laid over the top and never receives input.
 - **Offline mode** supports up to 10 players and gives each about 117 phrases from the main crate. Player numbers must
   be unique; the app cannot check that without a network.
 - **Synced rooms** hold up to 12 players and close after 6 hours without activity. Players are a
-  display name plus a random per-device id; there are no accounts. Late arrivals are dealt in.
+  display name plus a random per-device id; signing in is optional. Late arrivals are dealt in.
   The host can void a stuck call or remove a player whose phone has gone away, and if the host
   leaves, the next player becomes host.
 - **Regenerating icons**: edit `public/icons/icon.svg`, then `npm run icons` (needs Playwright).
