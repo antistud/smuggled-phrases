@@ -99,7 +99,11 @@ describe('seeded offline deal', () => {
     r = applyAction(r.game, { type: 'caught', playerId: OFFLINE_PLAYER_ID, cardId: id });
     if (!r.ok) throw new Error(r.error);
     g = r.game;
-    expect(g.players[OFFLINE_PLAYER_ID].hand[0].id).toBe(pile[HAND_SIZE]);
+    // The catchphrase was lifted out of the pile after the hand was dealt.
+    const catchphrase = g.players[OFFLINE_PLAYER_ID].catchphrase!;
+    expect(catchphrase.heat).toBe(1);
+    expect(pile.slice(HAND_SIZE)).toContain(catchphrase.id);
+    expect(g.players[OFFLINE_PLAYER_ID].hand[0].id).toBe(pile.slice(HAND_SIZE).filter((p) => p !== catchphrase.id)[0]);
   });
 
   it('honours hand size and gives every player plenty of replacement draws', () => {
@@ -186,6 +190,15 @@ describe('phrase packs', () => {
     expect(new Set(all.map((t) => t.trim().toLowerCase())).size).toBe(all.length);
     expect(PACKS.every((p) => p.rating === 'family')).toBe(true);
     expect(deckSize(buildDeck(PACKS.map((p) => p.id)))).toBe(all.length);
+  });
+
+  it('gives every pack an icon, a unique id and phrases at every difficulty', () => {
+    expect(new Set(PACKS.map((p) => p.id)).size).toBe(PACKS.length);
+    for (const pack of PACKS) {
+      expect(pack.icon, pack.id).toBeTruthy();
+      expect(pack.name.length, pack.id).toBeGreaterThan(0);
+      for (const tier of TIERS) expect(pack.phrases[tier].length, `${pack.id} ${tier}`).toBeGreaterThanOrEqual(5);
+    }
   });
 
   it('has a deep bench at every difficulty in the core pack', () => {

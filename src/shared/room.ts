@@ -83,6 +83,10 @@ function toNews(room: Room, events: GameEvent[]): Announcement[] {
     if (e.type === 'seized') {
       news.push({ kind: 'seized', name: nameOf(room, e.playerId) ?? '?', by: nameOf(room, e.catcherId), text: e.phrase.text });
     }
+    if (e.type === 'catchphrase') news.push({ kind: 'catchphrase', name: nameOf(room, e.playerId) ?? '?', text: e.phrase.text, count: e.count });
+    if (e.type === 'catchphraseCaught') {
+      news.push({ kind: 'catchphraseCaught', name: nameOf(room, e.playerId) ?? '?', by: nameOf(room, e.catcherId), text: e.phrase.text });
+    }
     if (e.type === 'wrongCall') {
       news.push({ kind: 'wrongCall', name: nameOf(room, e.playerId) ?? '?', accused: nameOf(room, e.accusedId), badgesLeft: e.badgesLeft });
     }
@@ -182,6 +186,11 @@ export function handleMessage(
       return play({ type: 'undeclare', playerId: me.id, cardId: msg.cardId });
     case 'smuggle':
       return play({ type: 'smuggle', playerId: me.id, cardId: msg.cardId, now });
+    case 'caught': {
+      // Nobody can award themselves the catcher's swap.
+      const catcherId = typeof msg.catcherId === 'string' && msg.catcherId !== me.id ? msg.catcherId : undefined;
+      return play({ type: 'caught', playerId: me.id, cardId: msg.cardId, catcherId });
+    }
     case 'accuse':
       return play({ type: 'accuse', playerId: me.id, accusedId: msg.accusedId, now });
     case 'resolve':
@@ -238,6 +247,7 @@ export function viewFor(room: Room, deviceId: string, connected: ReadonlySet<str
         badges: p?.badges ?? 0,
         smuggled: p?.smuggled.length ?? 0,
         seized: p?.seized.length ?? 0,
+        catchCount: p?.catchCount ?? 0,
       };
     }),
     you: {
@@ -247,6 +257,8 @@ export function viewFor(room: Room, deviceId: string, connected: ReadonlySet<str
       swapCredits: mine?.swapCredits ?? 0,
       smuggled: mine?.smuggled ?? [],
       seized: mine?.seized.length ?? 0,
+      catchphrase: mine?.catchphrase ?? null,
+      catchCount: mine?.catchCount ?? 0,
     },
     accusation: game?.accusation ?? null,
     winner: winnerId

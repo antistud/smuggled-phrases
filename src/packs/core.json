@@ -1,6 +1,7 @@
 {
   "id": "core",
   "name": "Standard Cargo",
+  "icon": "📦",
   "description": "The main crate: over a thousand phrases, from easy slips to absurd mouthfuls.",
   "rating": "family",
   "version": 2,

@@ -18,14 +18,23 @@ The app only manages hands, timers and scoring; all of the play happens out loud
 4. To catch someone, shout **"Contraband!"** inside the 30 seconds **and repeat the phrase**. Pointing at a person is not enough.
 5. Caught: the phrase is seized and replaced. The catcher may swap one of their own phrases for a new one.
 6. Wrong call: the caller draws an extra phrase and loses one of their 3 inspector badges. No badges, no calling. Bluffing with odd sentences to drain badges is allowed.
-7. First player with an empty hand wins.
-8. Phrases must be spoken aloud. Close paraphrases of long phrases count.
+7. Everyone also gets one **catchphrase**, always an easy one. Say it as often as you dare: it never
+   leaves your hand, and each time it survives its 30 seconds your catchphrase count goes up. If you
+   are caught you keep it, but that one does not count (and the catcher still earns their swap).
+8. First player with an empty hand wins. The catchphrase does not need clearing.
+9. Phrases must be spoken aloud.
+10. **Bend a phrase, never break it.** You may swap one or two filler words (and, but, or) and
+    rearrange it slightly to suit the local dialect, but never change the important details or the
+    spirit of the phrase. As a rule of thumb the phrase should stay 95% original.
+11. Be careful: if everyone else disagrees with how you bent a phrase, you are caught.
 
 ## Game settings
 
 The host of a room (or everyone, in an offline game) chooses three things:
 
-- **Phrase packs.** The main crate has 1,176 phrases; the bonus travel crate adds 40.
+- **Phrase packs.** The main crate has 1,176 phrases. Nine bonus crates of 40 to 45 phrases each
+  can be mixed in: Lost Luggage, Thanksgiving, Christmas, New Year's, For The Young Readers,
+  Mafia, Sports, Impossible and Pure Comedy.
 - **Phrases each.** 3 to 8 to start with. Fewer is a quick round, more is a long con.
 - **Spiciness.** Every phrase is rated easy, medium or hard to slip into conversation, shown as
   one to three chillies on the card. A level is never one difficulty: it sets the blend.
@@ -143,6 +152,7 @@ A pack is a JSON file in `src/packs/`:
 {
   "id": "after-dark",
   "name": "After Dark",
+  "icon": "🌙",
   "description": "Not for the family table.",
   "rating": "adult",
   "version": 1,

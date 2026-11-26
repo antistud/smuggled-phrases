@@ -47,7 +47,8 @@ body {
   -webkit-text-size-adjust: 100%;
   user-select: none;
   -webkit-user-select: none;
-  touch-action: manipulation;
+  /* Scrolling only: no pinch or double-tap zoom anywhere in the app. */
+  touch-action: pan-x pan-y;
 }
 /* The inside of a shipping container at night: ribbed steel, rust runs, one bad lamp. */
 #app {
@@ -123,6 +124,7 @@ h1, h2, h3, p { margin: 0; }
 .btn.ghost:active:not(:disabled) { box-shadow: inset 0 0 0 2px rgba(228, 213, 177, 0.35); background: rgba(0, 0, 0, 0.5); }
 .btn.dark { color: var(--paper); background: var(--ink); box-shadow: 0 3px 0 #000; }
 .btn.small { min-height: 44px; font-size: 0.95rem; width: auto; padding: 6px 14px; }
+.btn.small svg { width: 18px; height: 18px; flex: none; }
 .link { color: var(--mist); text-decoration: underline; text-underline-offset: 3px; min-height: 44px; padding: 0 8px; font-size: 0.95rem; }
 
 .topbar { display: flex; align-items: center; gap: 10px; min-height: 48px; margin-bottom: 10px; }
@@ -134,14 +136,20 @@ h1, h2, h3, p { margin: 0; }
 /* Paperwork: stained, creased, slightly crooked. */
 .paper {
   --sx: 80%; --sy: 30%;
+  --stain: linear-gradient(transparent, transparent);
   position: relative; color: var(--ink); border-radius: 3px;
   background:
-    radial-gradient(circle at var(--sx) var(--sy), transparent 0 17px, rgba(96, 56, 18, 0.22) 18px 20px, rgba(96, 56, 18, 0.05) 21px 23px, transparent 24px),
-    radial-gradient(60px 40px at calc(100% - var(--sx)) 85%, rgba(60, 40, 15, 0.16), transparent 70%),
+    var(--stain),
     linear-gradient(100deg, transparent 0 61.800%, rgba(255, 255, 255, 0.22) 62%, rgba(0, 0, 0, 0.06) 62.400%, transparent 63%),
     linear-gradient(rgba(29, 26, 22, 0.05) 1px, transparent 1px) 0 0 / 100% 7px,
     linear-gradient(170deg, #ecdfbe, var(--paper) 45%, var(--paper-2));
   box-shadow: 0 7px 16px rgba(0, 0, 0, 0.55), inset 0 0 26px rgba(110, 76, 30, 0.35);
+}
+/* Only the odd sheet has had a mug put down on it. */
+.paper.slip, .hand .card:nth-child(4n + 2) {
+  --stain:
+    radial-gradient(circle at var(--sx) var(--sy), transparent 0 17px, rgba(96, 56, 18, 0.22) 18px 20px, rgba(96, 56, 18, 0.05) 21px 23px, transparent 24px),
+    radial-gradient(60px 40px at calc(100% - var(--sx)) 85%, rgba(60, 40, 15, 0.16), transparent 70%);
 }
 .paper-head {
   display: flex; justify-content: space-between; align-items: center; gap: 8px;
@@ -208,11 +216,20 @@ h1, h2, h3, p { margin: 0; }
 .numgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
 .numgrid button { min-height: 54px; border-radius: 6px; background: rgba(0, 0, 0, 0.45); box-shadow: inset 0 0 0 2px rgba(228, 213, 177, 0.3); font-family: var(--stencil); font-weight: 700; font-size: 1.4rem; }
 .numgrid button[aria-pressed='true'] { background: var(--lamp); color: var(--ink); box-shadow: 0 3px 0 #7a5208; transform: rotate(-3deg) scale(1.06); }
-.pack { display: flex; align-items: center; gap: 12px; text-align: left; width: 100%; min-height: 60px; padding: 10px 12px; border-radius: 6px; background: rgba(0, 0, 0, 0.45); box-shadow: inset 0 0 0 2px rgba(228, 213, 177, 0.25); }
-.pack[aria-pressed='true'] { box-shadow: inset 0 0 0 2px var(--lamp); }
-.pack .tick { width: 26px; height: 26px; border-radius: 4px; border: 2px solid var(--mist); display: grid; place-items: center; flex: none; font-weight: 900; color: var(--ink); }
+/* Phrase packs: a shelf of crates you swipe along. */
+.packs { --bleed: 16px; flex: none; display: flex; gap: 10px; overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; scrollbar-width: none; margin: 0 calc(-1 * var(--bleed)); padding: 4px var(--bleed) 10px; }
+.packs::-webkit-scrollbar { display: none; }
+.tune .packs { --bleed: 12px; }
+.pack { position: relative; flex: none; width: 140px; min-height: 164px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; padding: 12px; border-radius: 8px; scroll-snap-align: start; scroll-margin-left: var(--bleed); background: rgba(0, 0, 0, 0.45); box-shadow: inset 0 0 0 2px rgba(228, 213, 177, 0.25); transition: transform 0.15s; }
+.pack[aria-pressed='true'] { box-shadow: inset 0 0 0 2px var(--lamp), 0 0 16px rgba(242, 182, 60, 0.25); background: rgba(242, 182, 60, 0.12); }
+.pack:active { transform: scale(0.97); }
+.pack .icon { font-size: 2.3rem; line-height: 1.1; filter: drop-shadow(0 3px 2px rgba(0, 0, 0, 0.5)); }
+.pack[aria-pressed='false'] .icon { filter: grayscale(0.7) drop-shadow(0 3px 2px rgba(0, 0, 0, 0.5)); opacity: 0.75; }
+.pack strong { font-family: var(--stencil); font-weight: 700; font-size: 1.02rem; letter-spacing: 0.04em; text-transform: uppercase; line-height: 1.05; }
+.pack .tick { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; border-radius: 4px; border: 2px solid var(--mist); display: grid; place-items: center; font-weight: 900; color: var(--ink); }
 .pack[aria-pressed='true'] .tick { background: var(--lamp); border-color: var(--lamp); }
-.pack small { display: block; color: var(--mist); }
+.pack small { display: block; color: var(--lamp); font-size: 0.74rem; font-weight: 700; letter-spacing: 0.04em; }
+.pack small.blurb { color: var(--mist); font-weight: 400; letter-spacing: 0; font-size: 0.78rem; line-height: 1.25; }
 .note { font-size: 0.9rem; color: var(--paper); background: rgba(0, 0, 0, 0.4); border-left: 4px solid var(--lamp); padding: 8px 10px; border-radius: 3px; }
 .note.bad { border-color: var(--red); }
 
@@ -298,6 +315,11 @@ h1, h2, h3, p { margin: 0; }
 @keyframes heartbeat { 0%, 100% { transform: scale(1); } 15% { transform: scale(1.22); } 30% { transform: scale(1); } 45% { transform: scale(1.14); } }
 .card .clock.tense { color: var(--red-dark); animation: heartbeat 1s infinite; }
 @keyframes sweat { 0%, 100% { transform: rotate(var(--tilt, 0deg)) translateX(0); } 25% { transform: rotate(calc(var(--tilt, 0deg) + 0.350deg)) translateX(0.600px); } 75% { transform: rotate(calc(var(--tilt, 0deg) - 0.350deg)) translateX(-0.600px); } }
+/* The catchphrase: pinned to the top of the hand, never leaves. */
+.card.catchphrase { --tilt: 0deg; box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px rgba(242, 182, 60, 0.75), 0 7px 16px rgba(0, 0, 0, 0.55); margin-bottom: 4px; }
+.card.catchphrase .paper-head { background: var(--ink); color: var(--lamp); border-bottom: 0; }
+.card.catchphrase .tally { display: inline-block; font-family: var(--stencil); font-size: 0.95rem; letter-spacing: 0.04em; color: #fff6d8; animation: pop 0.4s; }
+.card.catchphrase.live .tally, .card.catchphrase.done .tally { color: inherit; }
 .card.live { box-shadow: 0 0 0 3px var(--lamp), 0 0 30px rgba(242, 182, 60, 0.45), 0 7px 16px rgba(0, 0, 0, 0.55); animation: sweat 0.22s linear infinite; z-index: 2; }
 .card.live .paper-head { background: var(--lamp); color: var(--ink); border-bottom: 5px solid transparent; border-image: repeating-linear-gradient(-45deg, #1d1a16 0 8px, var(--lamp) 8px 16px) 5; }
 @keyframes glowgreen { 50% { box-shadow: 0 0 0 3px var(--green), 0 0 44px rgba(90, 220, 130, 0.75), 0 7px 16px rgba(0, 0, 0, 0.55); } }
@@ -357,6 +379,18 @@ h1, h2, h3, p { margin: 0; }
 .splash span { font-family: var(--stencil); font-weight: 700; text-transform: uppercase; font-size: clamp(2.600rem, 14vw, 4rem); color: #fff1e6; padding: 6px 18px; border: 8px double #fff1e6; background: var(--red); transform: rotate(-8deg); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7); animation: slam 0.45s cubic-bezier(0.3, 0, 0.2, 1) both; text-align: center; line-height: 1; }
 .splash span small { display: block; font-family: var(--marker); font-size: 1rem; letter-spacing: 0; text-transform: none; margin-top: 6px; }
 @keyframes slam { 0% { transform: rotate(-8deg) scale(4); opacity: 0; } 60% { transform: rotate(-8deg) scale(0.92); opacity: 1; } 80% { transform: rotate(-8deg) scale(1.05); } 100% { transform: rotate(-8deg) scale(1); } }
+
+/* ---------- several games at once ---------- */
+.stage { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.alerts { position: relative; z-index: 30; display: flex; flex-direction: column; gap: 6px; padding: calc(var(--safe-t) + 8px) calc(var(--safe-r) + 12px) 4px calc(var(--safe-l) + 12px); }
+.alert { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 8px 12px; border-radius: 4px; text-align: left; color: var(--paper); font-weight: 600; font-size: 0.95rem; background: rgba(0, 0, 0, 0.6); box-shadow: inset 0 0 0 2px var(--lamp), 0 6px 14px rgba(0, 0, 0, 0.5); animation: slidein 0.25s both; }
+.alert.urgent { color: #fff1e6; background: repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.22) 0 10px, transparent 10px 20px), var(--red); box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5); }
+.alert .stencil { font-size: 1.05rem; letter-spacing: 0.12em; flex: none; }
+.alert .go { margin-left: auto; flex: none; font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; text-decoration: underline; text-underline-offset: 3px; }
+.gamerow { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 60px; padding: 8px 14px; border-radius: 6px; text-align: left; background: rgba(0, 0, 0, 0.45); box-shadow: inset 0 0 0 2px rgba(242, 182, 60, 0.6); }
+.gamerow .stencil { font-size: 1.5rem; letter-spacing: 0.14em; color: var(--lamp); line-height: 1; flex: none; }
+.gamerow small { display: block; color: var(--mist); font-size: 0.82rem; }
+.gamerow .flag { margin-left: auto; flex: none; width: 12px; height: 12px; border-radius: 50%; background: var(--red); box-shadow: 0 0 10px var(--red); }
 
 /* ---------- sheets, toasts ---------- */
 .scrim { position: absolute; inset: 0; background: rgba(6, 5, 3, 0.78); z-index: 20; display: flex; flex-direction: column; justify-content: flex-end; animation: fade 0.15s ease-out; }

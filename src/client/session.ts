@@ -28,7 +28,7 @@ export interface SessionState {
   settings: GameSettings;
   phase: RoomPhase;
   connection: Connection;
-  you: { id: string; name: string; hand: Card[]; badges: number; swapCredits: number; smuggled: Phrase[]; seized: number };
+  you: { id: string; name: string; hand: Card[]; badges: number; swapCredits: number; smuggled: Phrase[]; seized: number; catchphrase: Card | null; catchCount: number };
   players: ScoreRow[];
   hostId: string | null;
   pileCount: number;
@@ -43,8 +43,48 @@ export interface SessionState {
 
 type Listener = () => void;
 
+// ------------------------------------------------------------- saved games
+// A phone can sit in several games at once. Each one is saved under its own id
+// (not its room code: a synced room's code can change while it is being created).
+
+interface SavedGame {
+  id: string;
+  kind: 'offline' | 'sync';
+  data: unknown;
+}
+
+function newId(): string {
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function savedGames(): SavedGame[] {
+  const list = load<SavedGame[]>('games');
+  return Array.isArray(list) ? list.filter((g) => g && typeof g.id === 'string' && g.data) : [];
+}
+
+function putGame(game: SavedGame): void {
+  const list = savedGames();
+  const at = list.findIndex((g) => g.id === game.id);
+  if (at >= 0) list[at] = game;
+  else list.push(game);
+  save('games', list);
+}
+
+function dropGame(id: string): void {
+  save('games', savedGames().filter((g) => g.id !== id));
+}
+
+/** Remembers which game to open first next time. */
+export function rememberCurrent(id: string | null): void {
+  save('current', id);
+}
+
 export abstract class Session {
   abstract state: SessionState;
+  /** Stable for the life of this game on this phone. */
+  abstract readonly id: string;
   private listeners = new Set<Listener>();
   private newsListeners = new Set<(a: Announcement) => void>();
   private errorListeners = new Set<(message: string) => void>();
@@ -85,7 +125,8 @@ export abstract class Session {
   dispose(): void {}
 
   // Offline (honor system) only.
-  caught(_cardId: string): void {}
+  /** Own up to being caught. Synced games can name who caught you. */
+  caught(_cardId: string, _catcherId?: string): void {}
   caughtSomeone(): void {}
   wrongCall(): void {}
   // Synced only.
@@ -110,28 +151,28 @@ interface OfflineSave {
 
 export class OfflineSession extends Session {
   state: SessionState;
+  readonly id: string;
   private data: OfflineSave;
 
-  private constructor(data: OfflineSave) {
+  private constructor(id: string, data: OfflineSave) {
     super();
+    this.id = id;
     this.data = data;
     this.state = this.view();
   }
 
   static create(code: string, packs: string[], playerNumber: number, settings: GameSettings): OfflineSession {
-    const session = new OfflineSession({ code, packs, settings, playerNumber, game: createOfflineGame(code, packs, playerNumber, settings) });
+    const session = new OfflineSession(newId(), { code, packs, settings, playerNumber, game: createOfflineGame(code, packs, playerNumber, settings) });
     session.persist();
     return session;
   }
 
-  static restore(): OfflineSession | null {
-    const data = load<OfflineSave>('offline');
-    return data?.game?.players?.[OFFLINE_PLAYER_ID] ? new OfflineSession(data) : null;
+  static restore(id: string, data: OfflineSave | null | undefined): OfflineSession | null {
+    return data?.game?.players?.[OFFLINE_PLAYER_ID] ? new OfflineSession(id, data) : null;
   }
 
   private persist(): void {
-    save('offline', this.data);
-    save('active', 'offline');
+    putGame({ id: this.id, kind: 'offline', data: this.data });
   }
 
   private view(): SessionState {
@@ -146,8 +187,8 @@ export class OfflineSession extends Session {
       settings,
       phase: game.winnerId ? 'over' : 'playing',
       connection: 'local',
-      you: { id: me.id, name, hand: me.hand, badges: me.badges, swapCredits: me.swapCredits, smuggled: me.smuggled, seized: me.seized.length },
-      players: [{ id: me.id, name, connected: true, cards: me.hand.length, badges: me.badges, smuggled: me.smuggled.length, seized: me.seized.length }],
+      you: { id: me.id, name, hand: me.hand, badges: me.badges, swapCredits: me.swapCredits, smuggled: me.smuggled, seized: me.seized.length, catchphrase: me.catchphrase ?? null, catchCount: me.catchCount ?? 0 },
+      players: [{ id: me.id, name, connected: true, cards: me.hand.length, badges: me.badges, smuggled: me.smuggled.length, seized: me.seized.length, catchCount: me.catchCount ?? 0 }],
       hostId: null,
       pileCount: game.pile.length,
       accusation: null,
@@ -177,8 +218,7 @@ export class OfflineSession extends Session {
   wrongCall() { this.act({ type: 'wrongCall', playerId: OFFLINE_PLAYER_ID }); }
   swap(cardId: string | null) { this.act({ type: 'swap', playerId: OFFLINE_PLAYER_ID, cardId }); }
   leave() {
-    save('offline', null);
-    save('active', null);
+    dropGame(this.id);
   }
 }
 
@@ -216,6 +256,7 @@ function apiBase(): string {
 
 export class SyncSession extends Session {
   state: SessionState;
+  readonly id: string;
   private data: SyncSave;
   private ws: WebSocket | null = null;
   private create: RoomOptions | null;
@@ -226,8 +267,9 @@ export class SyncSession extends Session {
   private pongTimer: ReturnType<typeof setTimeout> | undefined;
   private failures = 0;
 
-  private constructor(data: SyncSave, create: RoomOptions | null) {
+  private constructor(id: string, data: SyncSave, create: RoomOptions | null) {
     super();
+    this.id = id;
     this.data = data;
     this.create = create;
     this.state = this.view('connecting');
@@ -238,14 +280,13 @@ export class SyncSession extends Session {
   }
 
   static host(name: string, packs: string[], settings: GameSettings): SyncSession {
-    return new SyncSession({ code: randomCode(), name, view: null, offset: 0 }, { packs, ...settings });
+    return new SyncSession(newId(), { code: randomCode(), name, view: null, offset: 0 }, { packs, ...settings });
   }
   static join(code: string, name: string): SyncSession {
-    return new SyncSession({ code, name, view: null, offset: 0 }, null);
+    return new SyncSession(newId(), { code, name, view: null, offset: 0 }, null);
   }
-  static restore(): SyncSession | null {
-    const data = load<SyncSave>('sync');
-    return data?.code ? new SyncSession(data, null) : null;
+  static restore(id: string, data: SyncSave | null | undefined): SyncSession | null {
+    return data?.code ? new SyncSession(id, data, null) : null;
   }
 
   now(): number {
@@ -270,6 +311,8 @@ export class SyncSession extends Session {
         swapCredits: v?.you.swapCredits ?? 0,
         smuggled: v?.you.smuggled ?? [],
         seized: v?.you.seized ?? 0,
+        catchphrase: v?.you.catchphrase ?? null,
+        catchCount: v?.you.catchCount ?? 0,
       },
       players: v?.players ?? [],
       hostId: v?.hostId ?? null,
@@ -342,8 +385,7 @@ export class SyncSession extends Session {
       this.create = null;
       this.data.view = msg.room;
       this.data.offset = msg.now - Date.now();
-      save('sync', this.data);
-      save('active', 'sync');
+      putGame({ id: this.id, kind: 'sync', data: this.data });
       this.update('online');
     } else if (msg.t === 'news') {
       msg.items.forEach((item) => this.emitNews(item));
@@ -368,8 +410,7 @@ export class SyncSession extends Session {
   private fail(reason: string): void {
     this.closed = true;
     this.teardownSocket();
-    save('sync', null);
-    save('active', null);
+    dropGame(this.id);
     this.update('connecting', reason);
   }
 
@@ -430,6 +471,7 @@ export class SyncSession extends Session {
   declare(cardId: string) { this.send({ t: 'declare', cardId }); }
   undeclare(cardId: string) { this.send({ t: 'undeclare', cardId }); }
   smuggle(cardId: string) { this.send({ t: 'smuggle', cardId }); }
+  caught(cardId: string, catcherId?: string) { this.send({ t: 'caught', cardId, ...(catcherId ? { catcherId } : {}) }); }
   swap(cardId: string | null) { this.send({ t: 'swap', cardId }); }
   accuse(playerId: string) { this.send({ t: 'accuse', accusedId: playerId }); }
   resolve(cardId: string | null) { this.send({ t: 'resolve', cardId }); }
@@ -441,8 +483,7 @@ export class SyncSession extends Session {
 
   leave() {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ t: 'leave' } satisfies ClientMessage));
-    save('sync', null);
-    save('active', null);
+    dropGame(this.id);
     // Give the leave message a beat to flush before closing.
     setTimeout(() => this.dispose(), 150);
   }
@@ -457,9 +498,34 @@ export class SyncSession extends Session {
   }
 }
 
-export function restoreSession(): Session | null {
+/** Before multi-game support there was one saved game of each kind. Carry them over. */
+function migrateLegacy(): void {
+  const offline = load<OfflineSave>('offline');
+  const sync = load<SyncSave>('sync');
   const active = load<string>('active');
-  if (active === 'offline') return OfflineSession.restore();
-  if (active === 'sync') return SyncSession.restore();
-  return null;
+  if (!offline && !sync && !active) return;
+  for (const [kind, data] of [['offline', offline], ['sync', sync]] as const) {
+    if (!data) continue;
+    const id = newId();
+    putGame({ id, kind, data });
+    if (active === kind) rememberCurrent(id);
+  }
+  save('offline', null);
+  save('sync', null);
+  save('active', null);
+}
+
+/** Every game this phone is in, and the one to open first. */
+export function restoreSessions(): { sessions: Session[]; currentId: string | null } {
+  migrateLegacy();
+  const sessions: Session[] = [];
+  for (const saved of savedGames()) {
+    const session =
+      saved.kind === 'offline' ? OfflineSession.restore(saved.id, saved.data as OfflineSave) : SyncSession.restore(saved.id, saved.data as SyncSave);
+    if (session) sessions.push(session);
+    else dropGame(saved.id);
+  }
+  const wanted = load<string>('current');
+  const currentId = sessions.find((s) => s.id === wanted)?.id ?? sessions[0]?.id ?? null;
+  return { sessions, currentId };
 }

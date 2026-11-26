@@ -1,5 +1,13 @@
 import core from '../packs/core.json';
 import travel from '../packs/travel.json';
+import thanksgiving from '../packs/thanksgiving.json';
+import christmas from '../packs/christmas.json';
+import newyear from '../packs/newyear.json';
+import readers from '../packs/readers.json';
+import mafia from '../packs/mafia.json';
+import sports from '../packs/sports.json';
+import impossible from '../packs/impossible.json';
+import comedy from '../packs/comedy.json';
 
 export type PackRating = 'family' | 'adult';
 
@@ -17,6 +25,8 @@ export const HEAT: Record<Tier, 1 | 2 | 3> = { easy: 1, medium: 2, hard: 3 };
 export interface Pack {
   id: string;
   name: string;
+  /** An emoji shown on the pack's card in the picker. */
+  icon?: string;
   description: string;
   rating: PackRating;
   version: number;
@@ -34,7 +44,7 @@ export interface Phrase {
 /** A deck split by difficulty, ready to be mixed to a spiciness level. */
 export type TieredDeck = Record<Tier, Phrase[]>;
 
-export const PACKS: Pack[] = [core as Pack, travel as Pack];
+export const PACKS: Pack[] = [core, travel, thanksgiving, christmas, newyear, readers, mafia, sports, impossible, comedy] as Pack[];
 export const DEFAULT_PACK_IDS = ['core'];
 
 export function getPack(id: string): Pack | undefined {

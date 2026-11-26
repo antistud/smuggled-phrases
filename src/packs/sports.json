@@ -1,0 +1,61 @@
+{
+  "id": "sports",
+  "name": "Sports",
+  "icon": "🏆",
+  "description": "Clichés, mascots and orange slices.",
+  "rating": "family",
+  "version": 1,
+  "phrases": {
+    "easy": [
+      "the offside rule",
+      "a foam finger",
+      "extra time",
+      "the water bottle squirt",
+      "halftime oranges",
+      "a lucky jersey",
+      "a whistle on a string",
+      "sudden death overtime",
+      "the penalty box",
+      "a rain delay",
+      "bench warmer",
+      "the trophy cabinet",
+      "a hat trick",
+      "the wave",
+      "stoppage time",
+      "a slam dunk",
+      "the seventh inning stretch",
+      "a chewed mouthguard",
+      "a photo finish",
+      "the home crowd"
+    ],
+    "medium": [
+      "The ref needs glasses.",
+      "We left it all on the field.",
+      "It's a game of two halves.",
+      "I pulled a hamstring reaching for the remote.",
+      "That was clearly out of bounds.",
+      "The mascot got a yellow card.",
+      "We're taking it one game at a time.",
+      "He came off the bench and fell over.",
+      "They moved the goalposts, literally.",
+      "I only play for the orange slices.",
+      "The scoreboard has been wrong all season.",
+      "She trains by chasing the bus.",
+      "Nobody told the goalie we'd started.",
+      "The ball went over the fence again.",
+      "I'm in a rebuilding year."
+    ],
+    "hard": [
+      "I gave a hundred and ten percent and then had to sit down for a while.",
+      "Our team hasn't won since the coach started wearing that lucky tracksuit.",
+      "The match was delayed because a goose refused to leave the centre circle.",
+      "I ran the whole marathon, if you count the distance to and from the car.",
+      "We lost on penalties, which is impressive because it was a swimming gala.",
+      "The mascot and the referee have not spoken since the hot dog incident.",
+      "My fantasy team is doing so badly that the app sent me a sympathy card.",
+      "He celebrated the goal so hard that he missed the rest of the season.",
+      "Technically I was the fastest person there who was also carrying a sandwich.",
+      "They retired my jersey, mostly because nobody else wanted to wear it."
+    ]
+  }
+}

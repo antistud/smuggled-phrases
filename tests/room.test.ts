@@ -88,6 +88,26 @@ describe('rooms', () => {
     expect(viewFor(room, 'dev-a', new Set(['dev-a']))!.players.map((p) => p.connected)).toEqual([true, false, false]);
   });
 
+  it('lets a player own up to being caught, crediting whoever caught them', () => {
+    let room = must(lobby(), 'dev-a', { t: 'start' });
+    const [card, other] = view(room, 'dev-a').you.hand;
+    // Not said yet: nothing to own up to.
+    expect(send(room, 'dev-a', { t: 'caught', cardId: card.id, catcherId: 'p2' }).error).toEqual({ code: 'rule', detail: 'not-declared' });
+    room = must(room, 'dev-a', { t: 'declare', cardId: card.id });
+    const out = send(room, 'dev-a', { t: 'caught', cardId: card.id, catcherId: 'p2' }, T0 + 4000);
+    expect(out.news).toEqual([{ kind: 'seized', name: 'Ada', by: 'Bo', text: card.text }]);
+    room = out.room!;
+    expect(view(room, 'dev-a').you.hand).toHaveLength(HAND_SIZE);
+    expect(view(room, 'dev-a').you.hand.some((c) => c.id === card.id)).toBe(false);
+    expect(view(room, 'dev-a').you.seized).toBe(1);
+    expect(view(room, 'dev-b').you.swapCredits).toBe(1);
+    // You cannot name yourself to pocket the swap.
+    room = must(room, 'dev-a', { t: 'declare', cardId: other.id }, T0 + 5000);
+    room = must(room, 'dev-a', { t: 'caught', cardId: other.id, catcherId: 'p1' }, T0 + 6000);
+    expect(view(room, 'dev-a').you.swapCredits).toBe(0);
+    expect(view(room, 'dev-a').you.seized).toBe(2);
+  });
+
   it('runs a full bust: accuse, confirm, swap', () => {
     let room = must(lobby(), 'dev-a', { t: 'start' });
     const card = view(room, 'dev-a').you.hand[0];

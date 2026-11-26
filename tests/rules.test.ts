@@ -40,8 +40,23 @@ describe('setup', () => {
       expect(p.hand.every((c) => c.saidAt === null)).toBe(true);
     }
     expect(new Set(allCardIds(g)).size).toBe(15);
-    expect(g.pile).toHaveLength(25);
+    // 15 in hands, plus one catchphrase each.
+    expect(g.pile).toHaveLength(22);
     expect(g.pile.some((p) => allCardIds(g).includes(p.id))).toBe(false);
+  });
+
+  it('gives every player an easy catchphrase that is in nobody\'s hand', () => {
+    let g = createGame(['a', 'b', 'c'], pile(40));
+    g = addPlayer(g, 'd');
+    const phrases = Object.values(g.players).map((p) => p.catchphrase!);
+    expect(phrases.every((c) => c && c.heat === 1 && c.saidAt === null)).toBe(true);
+    expect(new Set(phrases.map((c) => c.id)).size).toBe(4);
+    const elsewhere = [...allCardIds(g), ...g.pile.map((p) => p.id)];
+    expect(phrases.some((c) => elsewhere.includes(c.id))).toBe(false);
+    // With no easy phrase left, it settles for the mildest there is.
+    const spicy = createGame(['a'], pile(12).filter((p) => p.heat > 1), 2);
+    expect(spicy.players.a.catchphrase!.heat).toBe(2);
+    expect(createGame(['a'], pile(2), 2).players.a.catchphrase).toBeNull();
   });
 
   it('deals the chosen hand size, as one block per player, and remembers it for late joiners', () => {
@@ -234,7 +249,67 @@ describe('Contraband! calls (synced rooms)', () => {
     const g = ok(g0, { type: 'accuse', playerId: 'b', accusedId: 'a', now: T0 + 1 }).game;
     expect(err(g, { type: 'accuse', playerId: 'c', accusedId: 'a', now: T0 + 2 })).toBe('accusation-pending');
     expect(err(g, { type: 'resolve', playerId: 'c', cardId: card.id, now: T0 + 2 })).toBe('not-accused');
-    expect(err(g, { type: 'resolve', playerId: 'a', cardId: g.players.a.hand[1].id, now: T0 + 2 })).toBe('not-declared');
+  });
+
+  it('a catchphrase can be said again and again, and counts each clean run', () => {
+    let g = createGame(['a', 'b'], pile(40));
+    const id = g.players.a.catchphrase!.id;
+    const hand = g.players.a.hand.map((c) => c.id);
+    for (let run = 1; run <= 3; run++) {
+      const t = T0 + run * 100_000;
+      g = ok(g, { type: 'declare', playerId: 'a', cardId: id, now: t }).game;
+      expect(err(g, { type: 'smuggle', playerId: 'a', cardId: id, now: t + 5000 })).toBe('timer-running');
+      const r = ok(g, { type: 'smuggle', playerId: 'a', cardId: id, now: t + TIMER_MS });
+      expect(r.events).toEqual([{ type: 'catchphrase', playerId: 'a', phrase: expect.objectContaining({ id }), count: run }]);
+      g = r.game;
+      expect(g.players.a.catchCount).toBe(run);
+      expect(g.players.a.catchphrase).toMatchObject({ id, saidAt: null });
+    }
+    // It never touches the hand, the smuggled list or the win.
+    expect(g.players.a.hand.map((c) => c.id)).toEqual(hand);
+    expect(g.players.a.smuggled).toEqual([]);
+    expect(g.winnerId).toBeNull();
+    expect(err(g, { type: 'swap', playerId: 'a', cardId: id })).toBe('no-swap');
+  });
+
+  it('a caught catchphrase stays put, is not counted, and rewards the catcher', () => {
+    let g = createGame(['a', 'b'], pile(40));
+    const id = g.players.a.catchphrase!.id;
+    // Owning up.
+    g = ok(g, { type: 'declare', playerId: 'a', cardId: id, now: T0 }).game;
+    let r = ok(g, { type: 'caught', playerId: 'a', cardId: id, catcherId: 'b' });
+    expect(r.events).toEqual([{ type: 'catchphraseCaught', playerId: 'a', catcherId: 'b', phrase: expect.objectContaining({ id }) }]);
+    g = r.game;
+    // A formal call, with the clock stopped while it is argued.
+    g = ok(g, { type: 'declare', playerId: 'a', cardId: id, now: T0 + 1000 }).game;
+    g = ok(g, { type: 'accuse', playerId: 'b', accusedId: 'a', now: T0 + 2000 }).game;
+    expect(err(g, { type: 'smuggle', playerId: 'a', cardId: id, now: T0 + 90_000 })).toBe('accusation-pending');
+    r = ok(g, { type: 'resolve', playerId: 'a', cardId: id, now: T0 + 3000 });
+    g = r.game;
+    expect(g.players.a.catchphrase).toMatchObject({ id, saidAt: null });
+    expect(g.players.a.catchCount).toBe(0);
+    expect(g.players.a.seized).toEqual([]);
+    expect(g.players.a.hand).toHaveLength(HAND_SIZE);
+    expect(g.players.b.swapCredits).toBe(2);
+    expect(g.players.b.badges).toBe(STARTING_BADGES);
+    // A wrong call gives the paused seconds back to a counting catchphrase.
+    g = ok(g, { type: 'declare', playerId: 'a', cardId: id, now: T0 + 10_000 }).game;
+    g = ok(g, { type: 'accuse', playerId: 'b', accusedId: 'a', now: T0 + 12_000 }).game;
+    g = ok(g, { type: 'resolve', playerId: 'a', cardId: null, now: T0 + 20_000 }).game;
+    expect(g.players.a.catchphrase!.saidAt).toBe(T0 + 18_000);
+  });
+
+  it('a phrase can be caught before its owner tapped "I said it"', () => {
+    const { g: g0 } = live();
+    const g = ok(g0, { type: 'accuse', playerId: 'b', accusedId: 'a', now: T0 + 1 }).game;
+    const untapped = g.players.a.hand[1];
+    expect(untapped.saidAt).toBeNull();
+    const r = ok(g, { type: 'resolve', playerId: 'a', cardId: untapped.id, now: T0 + 2 });
+    expect(r.game.accusation).toBeNull();
+    expect(r.game.players.a.seized.map((p) => p.id)).toContain(untapped.id);
+    expect(r.game.players.a.hand.some((c) => c.id === untapped.id)).toBe(false);
+    expect(r.game.players.b.swapCredits).toBe(1);
+    expect(r.game.players.b.badges).toBe(g.players.b.badges);
   });
 
   it('a call that lands after the 30 seconds cannot seize the card', () => {

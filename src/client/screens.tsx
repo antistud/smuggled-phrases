@@ -2,7 +2,7 @@
 import qrcode from 'qrcode-generator';
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { manifestNumber, MAX_OFFLINE_PLAYERS } from '../shared/deal';
-import { DEFAULT_PACK_IDS, getPack, PACKS, packSize, TIERS } from '../shared/packs';
+import { buildDeck, deckSize, DEFAULT_PACK_IDS, getPack, PACKS, packSize, TIERS } from '../shared/packs';
 import { DEFAULT_SETTINGS, MAX_HAND_SIZE, MIN_HAND_SIZE, SPICE_LEVELS, spiceLevel, type GameSettings } from '../shared/settings';
 import { CODE_LENGTH, normalizeCode, randomCode } from '../shared/prng';
 import { MAX_NAME_LENGTH } from '../shared/protocol';
@@ -52,9 +52,42 @@ export function MuteButton() {
   );
 }
 
-export function Home(props: { resume: SessionState | null; onResume: () => void; onCreate: () => void; onJoin: () => void; onHowTo: () => void }) {
+/** One line on where a game stands, for the list on the home screen. */
+function gameStatus(state: SessionState): string {
+  if (state.fatal) return 'Closed';
+  if (state.phase === 'over') return state.mode === 'offline' ? 'Finished' : `${state.winner?.name ?? 'Someone'} won`;
+  const left = `${state.you.hand.length} to smuggle`;
+  if (state.mode === 'offline') return `Offline · Player ${state.playerNumber} · ${left}`;
+  if (state.phase === 'lobby') return `In the hideout · ${state.players.length} aboard`;
+  return `${left} · ${state.players.length} smugglers`;
+}
+
+export function Home(props: {
+  games: { id: string; state: SessionState; flagged: boolean }[];
+  onOpen: (id: string) => void;
+  onCreate: () => void;
+  onJoin: () => void;
+  onHowTo: () => void;
+}) {
   const typed = useTypewriter(SAMPLE_PHRASES);
   const sheet = rapSheet();
+  const [copied, setCopied] = useState(false);
+  /** Tell friends about the game itself: no room needed. */
+  const share = () => {
+    const url = `${location.origin}/`;
+    const data = { title: 'Smuggled Phrases', text: 'Smuggled Phrases: a party game of sneaking silly phrases into conversation.', url };
+    if (navigator.share) {
+      navigator.share(data).catch(() => {});
+      return;
+    }
+    navigator.clipboard
+      ?.writeText(url)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2200);
+      })
+      .catch(() => {});
+  };
   return (
     <div class="screen home">
       <span class="lamp" aria-hidden="true" />
@@ -90,14 +123,25 @@ export function Home(props: { resume: SessionState | null; onResume: () => void;
             Rap sheet: <b>{rankFor(sheet.smuggled)}</b> · {sheet.smuggled} smuggled · {sheet.seized} seized · {sheet.getaways} clean {sheet.getaways === 1 ? 'getaway' : 'getaways'}
           </p>
         )}
-        {props.resume && (
-          <button class="btn amber" onClick={props.onResume}>
-            Resume game {props.resume.code}
+        {props.games.length > 0 && <p class="label" style="text-align:left">{props.games.length === 1 ? 'Your game' : 'Your games'}</p>}
+        {props.games.map((g) => (
+          <button key={g.id} class="gamerow" onClick={() => props.onOpen(g.id)} aria-label={`Open game ${g.state.code}. ${gameStatus(g.state)}`}>
+            <span class="stencil">{g.state.code}</span>
+            <span>
+              {g.state.mode === 'sync' ? g.state.you.name : 'Offline game'}
+              <small>{gameStatus(g.state)}</small>
+            </span>
+            {g.flagged && <span class="flag" aria-hidden="true" />}
           </button>
-        )}
-        <button class="btn" onClick={props.onCreate}>Start a game</button>
-        <button class="btn ghost" onClick={props.onJoin}>Join a game</button>
-        <button class="link" onClick={props.onHowTo}>How to play</button>
+        ))}
+        <button class="btn" onClick={props.onCreate}>{props.games.length > 0 ? 'Start another game' : 'Start a game'}</button>
+        <button class="btn ghost" onClick={props.onJoin}>{props.games.length > 0 ? 'Join another game' : 'Join a game'}</button>
+        <div class="row" style="justify-content:center;gap:14px">
+          <button class="link" style="white-space:nowrap" onClick={props.onHowTo}>How to play</button>
+          <button class="btn small ghost" style="white-space:nowrap;flex:none" onClick={share}>
+            <Icon name="share" /> {copied ? 'Link copied!' : 'Share with friends'}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -111,16 +155,24 @@ function PackPicker(props: { value: string[]; onChange: (ids: string[]) => void 
     if (next.length) props.onChange(next);
   };
   return (
-    <div class="stack" style="gap:8px">
-      {PACKS.map((pack) => (
-        <button key={pack.id} class="pack" aria-pressed={props.value.includes(pack.id)} onClick={() => toggle(pack.id)}>
-          <span class="tick">{props.value.includes(pack.id) ? '✓' : ''}</span>
-          <span>
-            <strong>{pack.name}</strong> · {packSize(pack)} phrases{pack.rating === 'adult' ? ' · 18+' : ''}
-            <small>{pack.description}</small>
-          </span>
-        </button>
-      ))}
+    <div class="stack" style="gap:4px">
+      <div class="packs" role="group" aria-label="Phrase packs. Swipe sideways for more.">
+        {PACKS.map((pack) => {
+          const on = props.value.includes(pack.id);
+          return (
+            <button key={pack.id} class="pack" aria-pressed={on} onClick={() => toggle(pack.id)}>
+              <span class="tick" aria-hidden="true">{on ? '✓' : ''}</span>
+              <span class="icon" aria-hidden="true">{pack.icon ?? '📦'}</span>
+              <strong>{pack.name}</strong>
+              <small>{packSize(pack)} phrases{pack.rating === 'adult' ? ' · 18+' : ''}</small>
+              <small class="blurb">{pack.description}</small>
+            </button>
+          );
+        })}
+      </div>
+      <p class="muted" style="font-size:.82rem">
+        {props.value.length} of {PACKS.length} crates loaded · {deckSize(buildDeck(props.value))} phrases · swipe for more
+      </p>
     </div>
   );
 }
@@ -311,7 +363,7 @@ function QrCode(props: { text: string }) {
   return <div class="qr" role="img" aria-label="QR code to join this room" dangerouslySetInnerHTML={{ __html: svg }} />;
 }
 
-export function Lobby(props: { session: Session; state: SessionState; onLeave: () => void }) {
+export function Lobby(props: { session: Session; state: SessionState; onLeave: () => void; onHome: () => void }) {
   const { session, state } = props;
   const isHost = state.hostId === state.you.id;
   const url = joinUrl(state.code);
@@ -322,7 +374,7 @@ export function Lobby(props: { session: Session; state: SessionState; onLeave: (
   };
   return (
     <div class="screen">
-      <TopBar title="The hideout" onBack={props.onLeave} />
+      <TopBar title="The hideout" onBack={props.onHome} />
       <div class="stack" style="gap:14px">
         <div class="codebox">
           <span class="codechip">{state.code}</span>
@@ -367,6 +419,7 @@ export function Lobby(props: { session: Session; state: SessionState; onLeave: (
         ) : (
           <p class="note">Waiting for the host to deal the contraband…</p>
         )}
+        <button class="link" onClick={props.onLeave}>Leave room</button>
       </div>
     </div>
   );
@@ -376,7 +429,7 @@ export function Lobby(props: { session: Session; state: SessionState; onLeave: (
 
 const GAME_RANKS = ['Tourist', 'Pickpocket', 'Mule', 'Runner', 'Fixer', 'Kingpin'];
 
-export function Scoreboard(props: { session: Session; state: SessionState; onClose: () => void; onHowTo: () => void; onLeave: () => void }) {
+export function Scoreboard(props: { session: Session; state: SessionState; onClose: () => void; onHowTo: () => void; onLeave: () => void; onHome: () => void }) {
   const { session, state } = props;
   const isHost = state.mode === 'sync' && state.hostId === state.you.id;
   const [confirmLeave, setConfirmLeave] = useState(false);
@@ -394,6 +447,7 @@ export function Scoreboard(props: { session: Session; state: SessionState; onClo
               <th>Left</th>
               <th>Badges</th>
               <th>Cleared</th>
+              <th title="Times their catchphrase got through uncaught">Catch</th>
             </tr>
           </thead>
           <tbody>
@@ -415,6 +469,7 @@ export function Scoreboard(props: { session: Session; state: SessionState; onClo
                 <td>{p.cards}</td>
                 <td><Badges left={p.badges} /></td>
                 <td>{p.smuggled}</td>
+                <td>{p.catchCount ? `×${p.catchCount}` : '–'}</td>
               </tr>
             ))}
           </tbody>
@@ -430,6 +485,7 @@ export function Scoreboard(props: { session: Session; state: SessionState; onClo
       {isHost && state.phase === 'playing' && (
         <button class="btn ghost" onClick={() => { session.again(); props.onClose(); }}>Re-deal a new game</button>
       )}
+      <button class="btn ghost" onClick={props.onHome}>My games</button>
       {confirmLeave ? (
         <div class="row">
           <button class="btn red" onClick={props.onLeave}>Yes, leave</button>
@@ -445,7 +501,7 @@ export function Scoreboard(props: { session: Session; state: SessionState; onClo
 
 // -------------------------------------------------------------------- win
 
-export function Win(props: { session: Session; state: SessionState; onLeave: () => void }) {
+export function Win(props: { session: Session; state: SessionState; onLeave: () => void; onHome: () => void }) {
   const { session, state } = props;
   const winner = state.winner!;
   const mine = winner.id === state.you.id;
@@ -468,11 +524,19 @@ export function Win(props: { session: Session; state: SessionState; onLeave: () 
         ))}
         {winner.phrases.length === 0 && <li class="paper">Nothing on record.</li>}
       </ol>
+      {(() => {
+        // The catchphrase count is its own little contest.
+        const best = Math.max(0, ...state.players.map((p) => p.catchCount ?? 0));
+        if (best === 0) return null;
+        const champs = state.players.filter((p) => (p.catchCount ?? 0) === best).map((p) => (state.mode === 'offline' ? 'You' : p.name));
+        return <p class="note">Catchphrase {champs.length > 1 ? 'champions' : 'champion'}: <b>{champs.join(' & ')}</b>, ×{best} without getting caught.</p>;
+      })()}
       <div class="spacer" />
       <div class="stack" style="width:100%">
         {isHost && <button class="btn amber" onClick={() => session.again()}>Deal again</button>}
         {state.mode === 'sync' && !isHost && <p class="note">The host can deal another round.</p>}
-        <button class="btn ghost" onClick={props.onLeave}>{state.mode === 'sync' ? 'Leave room' : 'Back to start'}</button>
+        <button class="btn ghost" onClick={props.onLeave}>{state.mode === 'sync' ? 'Leave room' : 'End game'}</button>
+        <button class="link" onClick={props.onHome}>My games</button>
       </div>
     </div>
   );
@@ -492,12 +556,24 @@ export function HowTo(props: { onBack: () => void }) {
         <li class="paper">Think someone just smuggled? Shout <b>“Contraband!”</b> within the 30 seconds <b>and repeat the phrase</b>. Pointing at a person is not enough.</li>
         <li class="paper">Caught: the phrase is <b>seized</b> and replaced with a new one. The catcher may swap one of their own phrases.</li>
         <li class="paper">Wrong call: the caller <b>draws an extra phrase</b> and loses one of their <b>3 inspector badges</b>. No badges, no calling. Bluffing with odd sentences to drain badges is fair play.</li>
-        <li class="paper">First player with an <b>empty hand</b> wins.</li>
-        <li class="paper">Phrases must be spoken aloud. A close paraphrase of a long phrase counts.</li>
+        <li class="paper">You also get one <b>catchphrase</b>. Say it as often as you dare: it never leaves your hand, and every time it survives 30 seconds your count goes up. Caught? You keep it, but that one does not count.</li>
+        <li class="paper">First player with an <b>empty hand</b> wins. Your catchphrase does not need clearing.</li>
+        <li class="paper">Phrases must be spoken <b>aloud</b>.</li>
+        <li class="paper"><b>Bend a phrase, never break it.</b> You may swap one or two filler words (and, but, or) and rearrange it slightly to suit how people talk where you are, but never change the important details or the spirit of the phrase. Rule of thumb: keep it <b>95% original</b>.</li>
+        <li class="paper">Careful: if <b>everyone else disagrees</b> with how you bent it, you are caught.</li>
       </ol>
       <p class="muted" style="margin:14px 0;font-size:.9rem">
         Your timers keep running if the phone locks. In a synced room the app tracks the scoreboard and settles calls; offline, it is all on your honor.
       </p>
+      <a
+        class="link"
+        style="display:inline-flex;align-items:center;align-self:center;margin-bottom:8px"
+        href="https://github.com/antistud/smuggled-phrases#how-to-play"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Read the full rules
+      </a>
       <button class="btn" onClick={props.onBack}>Got it</button>
     </div>
   );

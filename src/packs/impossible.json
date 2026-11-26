@@ -1,0 +1,61 @@
+{
+  "id": "impossible",
+  "name": "Impossible",
+  "icon": "🤯",
+  "description": "Good luck getting any of these past the table.",
+  "rating": "family",
+  "version": 1,
+  "phrases": {
+    "easy": [
+      "quantum marmalade",
+      "a left-handed volcano",
+      "the Duke of Spoons",
+      "seventeen invisible llamas",
+      "retroactive pudding",
+      "a haunted spreadsheet",
+      "the moon's dentist",
+      "sideways Tuesday",
+      "an apologetic tornado",
+      "pre-chewed thunder",
+      "the Treaty of Custard",
+      "a mile of wet spaghetti",
+      "octopus tax season",
+      "the forbidden trombone",
+      "a goose with a mortgage",
+      "emergency bagpipes",
+      "the owls' private car park",
+      "a cube-shaped egg",
+      "gravel-flavoured ice cream",
+      "underwater candle factory"
+    ],
+    "medium": [
+      "The walrus has revoked my library card.",
+      "I owe eleven dollars to a volcano.",
+      "My shadow has started arriving late.",
+      "The lighthouse and I are no longer speaking.",
+      "A pelican notarised the whole thing.",
+      "Never trust a staircase that hums.",
+      "I was briefly the mayor of a puddle.",
+      "The cheese filed a formal complaint.",
+      "My left shoe is fluent in Portuguese.",
+      "That cloud has been following me since Lisbon.",
+      "I traded my bicycle for a rumour.",
+      "The xylophone knows what it did.",
+      "We buried the trombone at sea.",
+      "An otter is contesting my will.",
+      "Gravity and I have agreed to disagree."
+    ],
+    "hard": [
+      "The ostrich who taught my yoga class was arrested for impersonating a lamp.",
+      "I can't come in on Thursday because my trampoline is testifying in court.",
+      "According to the map, the treasure is buried under a different, smaller map.",
+      "My grandfather once arm-wrestled a lighthouse and they called it a draw.",
+      "The submarine was fine until someone opened a window to let the bees out.",
+      "I've been legally required to apologise to every pigeon in the city.",
+      "Seven accordions fell down the stairs and it was the best concert I've heard.",
+      "The wizard at the bus stop said my aura is the wrong shade of rectangle.",
+      "We had to cancel the eclipse because nobody remembered to book the moon.",
+      "My horoscope just said 'not you' and then listed someone else's name."
+    ]
+  }
+}

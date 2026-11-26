@@ -1,0 +1,61 @@
+{
+  "id": "readers",
+  "name": "For The Young Readers",
+  "icon": "📚",
+  "description": "Short, simple words for new readers.",
+  "rating": "family",
+  "version": 1,
+  "phrases": {
+    "easy": [
+      "a red balloon",
+      "the big dog",
+      "my blue hat",
+      "a funny frog",
+      "the best nap",
+      "ten fat cats",
+      "a snug bug",
+      "the wet sock",
+      "one pink pig",
+      "a hot pot",
+      "the lost mitten",
+      "a bunny hop",
+      "the moon song",
+      "a yellow bus",
+      "the tall giraffe",
+      "my sticky hands",
+      "a duck in a truck",
+      "the silly goose",
+      "a jar of stars",
+      "the last cookie"
+    ],
+    "medium": [
+      "The cat sat on my lunch.",
+      "I can hop like a frog.",
+      "My sock has a hole in it.",
+      "The dog ate my hat.",
+      "A bug is on the rug.",
+      "I see a fish in the dish.",
+      "The pig can jump so high.",
+      "My kite is stuck in a tree.",
+      "The duck said hello to me.",
+      "I lost my shoe at the zoo.",
+      "The bear wants more jam.",
+      "We ran to the big red barn.",
+      "The fox took a long nap.",
+      "My teddy needs a bath.",
+      "The bee buzzed by my nose."
+    ],
+    "hard": [
+      "The little green frog sat on a log and sang to the moon.",
+      "My big brown dog likes to dig holes in the mud.",
+      "I saw a mouse run under the house with a piece of cheese.",
+      "The baby bird fell asleep in my left shoe.",
+      "We made a fort out of pillows and nobody could get in.",
+      "The silly old goat ate the buttons off my coat.",
+      "I put my boots on the wrong feet and walked like a duck.",
+      "A snail came to tea and took all day to get here.",
+      "The sun went to bed, so the stars came out to play.",
+      "My cat thinks the box is better than the toy."
+    ]
+  }
+}
