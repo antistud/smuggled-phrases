@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { normalizeCode } from '../shared/prng';
 import type { Announcement, RoomPhase } from '../shared/protocol';
-import { addToRapSheet } from './flavor';
+import { account, errorText } from './account';
+import { recordProgress } from './flavor';
 import { fx } from './fx';
 import { Hand } from './hand';
-import { HowTo, Home, Lobby, Scoreboard, Setup, Win } from './screens';
+import { AccountScreen, HowTo, Home, Lobby, RulesSheet, Scoreboard, Setup, Win } from './screens';
 import { rememberCurrent, restoreSessions, type Session, type SessionState } from './session';
+import { load, save } from './storage';
 import { sfx } from './sfx';
 import { buzz, Toasts, useSession, type Toast } from './ui';
 
-type Route = { name: 'home' } | { name: 'setup'; kind: 'create' | 'join'; code?: string; forceSync?: boolean } | { name: 'howto'; back: Route } | { name: 'game' };
+type Route = { name: 'home' } | { name: 'setup'; kind: 'create' | 'join'; code?: string; forceSync?: boolean } | { name: 'howto'; back: Route } | { name: 'game' } | { name: 'account' };
 
 /** ?room=CODE from an invite link or QR code. */
 function invitedRoom(): string {
@@ -34,6 +36,8 @@ function describe(a: Announcement): Omit<Toast, 'id'> {
       return { body: <>The host voided that call.</> };
     case 'joined':
       return { body: <>{a.name} joined the room.</> };
+    case 'renamed':
+      return { body: <>{a.from} now goes by {a.name}.</> };
     case 'left':
       return { body: <>{a.name} left the room.</> };
   }
@@ -82,6 +86,8 @@ function sameGame(a: SessionState, b: SessionState): boolean {
 export function App() {
   const [boot] = useState(() => {
     const restored = restoreSessions();
+    // Games that were already over when the app opened have had their fanfare and been counted.
+    for (const s of restored.sessions) if (s.state.phase === 'over') celebrated.add(s);
     const code = invitedRoom();
     const invited = code ? restored.sessions.find((s) => s.state.mode === 'sync' && s.state.code === code) : undefined;
     const currentId = invited?.id ?? restored.currentId;
@@ -118,6 +124,24 @@ export function App() {
     setToasts((list) => [...list.slice(-2), { ...t, id }]);
     setTimeout(() => setToasts((list) => list.filter((x) => x.id !== id)), 4200);
   };
+
+  // Arriving from the emailed sign-in link: /?login=<token>.
+  useEffect(() => {
+    const token = new URLSearchParams(location.search).get('login');
+    if (token) {
+      history.replaceState(null, '', location.pathname);
+      void account.verify({ token }).then((result) => {
+        if (result.ok) {
+          sfx.thud();
+          toast({ stamp: { text: 'Cleared', green: true }, body: <>Signed in as {account.current?.email}.</> });
+        } else {
+          toast({ stamp: { text: 'Denied' }, body: <>{errorText(result.error)}</> });
+        }
+      });
+    } else {
+      void account.refresh();
+    }
+  }, []);
 
   useEffect(() => {
     const offs = sessions.flatMap((s) => {
@@ -188,6 +212,8 @@ export function App() {
   let screen;
   if (route.name === 'howto') {
     screen = <HowTo onBack={() => setRoute(route.back)} />;
+  } else if (route.name === 'account') {
+    screen = <AccountScreen onBack={() => setRoute({ name: 'home' })} />;
   } else if (route.name === 'setup') {
     screen = <Setup kind={route.kind} code={route.code} forceSync={route.forceSync} onBack={home} onSession={adopt} />;
   } else if (route.name === 'game' && session) {
@@ -200,6 +226,7 @@ export function App() {
         onCreate={() => setRoute({ name: 'setup', kind: 'create' })}
         onJoin={() => setRoute({ name: 'setup', kind: 'join' })}
         onHowTo={() => setRoute({ name: 'howto', back: { name: 'home' } })}
+        onAccount={() => setRoute({ name: 'account' })}
       />
     );
   }
@@ -237,6 +264,17 @@ function Game(props: { session: Session; onLeave: () => void; onHome: () => void
   const state = useSession(session);
   const [scores, setScores] = useState(false);
 
+  // First game on this phone: put the rules in front of the player as the hand is dealt.
+  const [rules, setRules] = useState(false);
+  useEffect(() => {
+    if (state.phase === 'playing' && !load<boolean>('rulesSeen')) setRules(true);
+  }, [state.phase]);
+  const closeRules = () => {
+    save('rulesSeen', true);
+    setRules(false);
+  };
+
+  // Celebrate, and count the result, once per game: not again when you switch back to it.
   const won = state.phase === 'over';
   useEffect(() => {
     if (!won) {
@@ -250,7 +288,8 @@ function Game(props: { session: Session; onLeave: () => void; onHome: () => void
     buzz([100, 60, 100, 60, 500]);
     fx.cash();
     sfx.fanfare();
-    if (state.winner?.id === state.you.id) addToRapSheet({ getaways: 1 });
+    recordProgress(state.mode, { games: 1, getaways: state.winner?.id === state.you.id ? 1 : 0 });
+    if (state.mode === 'sync') setTimeout(() => void account.refresh(), 1500);
   }, [won]);
   useEffect(() => {
     if (state.phase !== 'playing') setScores(false);
@@ -270,6 +309,7 @@ function Game(props: { session: Session; onLeave: () => void; onHome: () => void
   return (
     <>
       <Hand session={session} state={state} onScores={() => setScores(true)} />
+      {rules && <RulesSheet onClose={closeRules} />}
       {scores && <Scoreboard session={session} state={state} onClose={() => setScores(false)} onHowTo={props.onHowTo} onLeave={props.onLeave} onHome={props.onHome} />}
     </>
   );

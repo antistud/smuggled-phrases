@@ -3,7 +3,7 @@ import type { Phrase } from './packs';
 import type { Accusation, Card } from './rules';
 import type { GameSettings } from './settings';
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 export const MAX_ROOM_PLAYERS = 12;
 export const MAX_NAME_LENGTH = 16;
 
@@ -13,8 +13,10 @@ export interface RoomOptions extends Partial<GameSettings> {
 }
 
 export type ClientMessage =
-  /** First message on every (re)connection. `create` opens a new room. */
-  | { t: 'hello'; v: number; deviceId: string; name: string; create?: RoomOptions }
+  /** First message on every (re)connection. `create` opens a new room; `session` links a signed-in account. */
+  | { t: 'hello'; v: number; deviceId: string; name: string; create?: RoomOptions; session?: string }
+  /** Change your own display name, at any point. */
+  | { t: 'rename'; name: string }
   /** Host, in the lobby: change packs, hand size or spiciness. */
   | { t: 'configure'; options: RoomOptions }
   | { t: 'start' }
@@ -77,6 +79,7 @@ export type Announcement =
   | { kind: 'wrongCall'; name: string; accused: string | null; badgesLeft: number }
   | { kind: 'cancelled' }
   | { kind: 'joined'; name: string }
+  | { kind: 'renamed'; from: string; name: string }
   | { kind: 'left'; name: string };
 
 export type ServerErrorCode =

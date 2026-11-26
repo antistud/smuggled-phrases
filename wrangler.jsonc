@@ -12,7 +12,14 @@
     "run_worker_first": ["/api/*"]
   },
   "durable_objects": {
-    "bindings": [{ "name": "ROOMS", "class_name": "RoomObject" }]
+    "bindings": [
+      { "name": "ROOMS", "class_name": "RoomObject" },
+      { "name": "ACCOUNTS", "class_name": "AccountObject" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RoomObject"] }]
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["RoomObject"] },
+    { "tag": "v2", "new_sqlite_classes": ["AccountObject"] }
+  ]
+  // Email sign-in: set MAIL_FROM as a var and RESEND_API_KEY as a secret (see README).
 }

@@ -1,8 +1,11 @@
 /**
- * Smuggled Phrases backend: one Durable Object per room.
+ * Smuggled Phrases backend.
  *
- * The Worker serves the built PWA (static assets) and routes
- * /api/rooms/:code/ws to the room's Durable Object. The object holds the
+ * The Worker serves the built PWA (static assets), routes
+ * /api/rooms/:code/ws to the room's Durable Object, and exposes the small
+ * account API (/api/auth/*, /api/me) backed by one Durable Object per email.
+ *
+ * Rooms: The object holds the
  * authoritative Room (see src/shared/room.ts), persists it on every change and
  * uses hibernating WebSockets, so an idle room costs nothing.
  */
@@ -11,9 +14,83 @@ import { normalizeCode } from '../src/shared/prng';
 import { PROTOCOL_VERSION, type ClientMessage, type ServerMessage } from '../src/shared/protocol';
 import { handleMessage, viewFor, type Room } from '../src/shared/room';
 
-interface Env {
+import { isValidEmail, normalizeEmail } from '../src/shared/account';
+import { accountKey, AccountObject, sha256, splitCredential } from './accounts';
+import type { MailEnv } from './mail';
+
+export { AccountObject };
+
+interface Env extends MailEnv {
   ROOMS: DurableObjectNamespace<RoomObject>;
+  ACCOUNTS: DurableObjectNamespace<AccountObject>;
   ASSETS: Fetcher;
+  /** Optional: the public origin to put in sign-in links. Defaults to the request's origin. */
+  APP_ORIGIN?: string;
+}
+
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+};
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...CORS } });
+
+const ERROR_STATUS: Record<string, number> = { 'too-soon': 429, 'too-many': 429, locked: 429, 'email-not-configured': 503, 'email-failed': 502 };
+
+/** The account API. Every route answers JSON: { ok: true, ... } or { ok: false, error }. */
+async function accountApi(request: Request, env: Env, path: string): Promise<Response> {
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
+  const account = (key: string) => env.ACCOUNTS.get(env.ACCOUNTS.idFromName(key));
+  let body: Record<string, unknown> = {};
+  if (request.method === 'POST') {
+    try {
+      const text = await request.text();
+      if (text.length > 4096) return json({ ok: false, error: 'bad-request' }, 413);
+      body = text ? JSON.parse(text) : {};
+    } catch {
+      return json({ ok: false, error: 'bad-request' }, 400);
+    }
+  }
+  const fail = (error: string) => json({ ok: false, error }, ERROR_STATUS[error] ?? 400);
+
+  if (path === '/api/auth/request' && request.method === 'POST') {
+    const email = normalizeEmail(String(body.email ?? ''));
+    if (!isValidEmail(email)) return fail('bad-email');
+    const key = await accountKey(email);
+    // Never build the link from a caller-supplied origin in production: that would let another
+    // site have our email deliver a working sign-in token to its own page.
+    const devOrigin = env.DEV_MAGIC_LINKS === 'true' ? request.headers.get('Origin') : null;
+    const origin = env.APP_ORIGIN || devOrigin || new URL(request.url).origin;
+    const result = await account(key).requestLogin(email, key, origin.replace(/\/$/, ''));
+    return result.ok ? json(result) : fail(result.error);
+  }
+
+  if (path === '/api/auth/verify' && request.method === 'POST') {
+    // Either the token from the link ("<key>.<token>") or the email plus the typed code.
+    const fromLink = splitCredential(body.token);
+    const key = fromLink?.key ?? (typeof body.email === 'string' && isValidEmail(normalizeEmail(body.email)) ? await accountKey(body.email) : null);
+    if (!key) return fail('no-login');
+    const result = await account(key).completeLogin(key, fromLink ? { token: fromLink.secret } : { code: String(body.code ?? '') });
+    return result.ok ? json(result) : fail(result.error);
+  }
+
+  const credential = splitCredential((request.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, ''));
+  if (!credential) return json({ ok: false, error: 'not-signed-in' }, 401);
+  const stub = account(credential.key);
+  const reply = (me: unknown) => (me ? json({ ok: true, account: me }) : json({ ok: false, error: 'not-signed-in' }, 401));
+
+  if (path === '/api/me' && request.method === 'GET') return reply(await stub.me(credential.secret));
+  if (path === '/api/me' && request.method === 'POST') return reply(await stub.setName(credential.secret, String(body.name ?? '')));
+  if (path === '/api/me/stats' && request.method === 'POST') {
+    if (typeof body.batch !== 'string' || !body.batch || typeof body.delta !== 'object' || !body.delta) return fail('bad-request');
+    return reply(await stub.report(credential.secret, body.delta as Record<string, number>, body.batch));
+  }
+  if (path === '/api/auth/signout' && request.method === 'POST') {
+    await stub.signOut(credential.secret);
+    return json({ ok: true });
+  }
+  return json({ ok: false, error: 'not-found' }, 404);
 }
 
 /** Rooms are deleted after this long with no activity. */
@@ -33,6 +110,7 @@ export default {
       headers.set('X-Room-Code', code);
       return stub.fetch(new Request(request, { headers }));
     }
+    if (url.pathname.startsWith('/api/auth/') || url.pathname.startsWith('/api/me')) return accountApi(request, env, url.pathname);
     if (url.pathname.startsWith('/api/')) return new Response('Not found', { status: 404 });
     return env.ASSETS.fetch(request);
   },
@@ -114,6 +192,19 @@ export class RoomObject extends DurableObject<Env> {
       }
       deviceId = msg.deviceId;
     }
+    // A signed-in player proves it with their session; the room remembers the account.
+    let verifiedAccount: string | null = null;
+    if (msg.t === 'hello') {
+      const credential = splitCredential(msg.session);
+      if (credential) {
+        try {
+          const me = await this.env.ACCOUNTS.get(this.env.ACCOUNTS.idFromName(credential.key)).me(credential.secret);
+          if (me) verifiedAccount = credential.key;
+        } catch {
+          /* account service unavailable: play on as a guest */
+        }
+      }
+    }
     if (!deviceId) return this.send(ws, { t: 'error', code: 'bad-message', detail: 'hello first' });
 
     let outcome;
@@ -140,6 +231,20 @@ export class RoomObject extends DurableObject<Env> {
           other.close(4001, 'removed');
         }
       }
+    }
+
+    if (msg.t === 'hello' && outcome.room) {
+      const member = outcome.room.members.find((m) => m.deviceId === deviceId);
+      if (member) {
+        if (verifiedAccount) member.account = verifiedAccount;
+        else delete member.account;
+      }
+    }
+
+    // Count progress for signed-in players. Done here, on the server, so it cannot be faked.
+    for (const award of outcome.awards ?? []) {
+      const key = (outcome.room ?? room)?.members.find((m) => m.id === award.memberId)?.account;
+      if (key) this.ctx.waitUntil(this.env.ACCOUNTS.get(this.env.ACCOUNTS.idFromName(key)).award(award.delta).catch(() => {}));
     }
 
     this.room = outcome.room;

@@ -426,6 +426,15 @@ h1, h2, h3, p { margin: 0; }
 .scores .kick { font-family: var(--ui); font-size: 0.72rem; font-weight: 700; text-decoration: underline; min-height: 32px; padding: 0 4px; color: var(--red-dark); }
 .scores tr.lead td:first-child::before { content: '★ '; color: var(--red); }
 
+.scores.record td { font-size: 1.2rem; text-align: right; padding-right: 14px; }
+.scores.record td:first-child { text-align: left; }
+.scores.record tr:first-child td { border-top: 0; }
+.nameinput { flex: 1; min-width: 0; min-height: 56px; border-radius: 6px; border: 2px solid rgba(228, 213, 177, 0.35); background: rgba(0, 0, 0, 0.45); color: var(--paper); padding: 0 14px; font-family: var(--typed); font-size: 1.2rem; user-select: text; -webkit-user-select: text; }
+.nameinput:focus { border-color: var(--lamp); outline: none; }
+.manifest .kick { font-family: var(--ui); font-size: 0.72rem; font-weight: 700; text-decoration: underline; min-height: 40px; padding: 0 4px; color: var(--red-dark); }
+.sheet .stick { position: sticky; bottom: calc(-1 * (var(--safe-b) + 16px)); margin: 0 -16px calc(-1 * (var(--safe-b) + 16px)); padding: 12px 16px calc(var(--safe-b) + 16px); background: linear-gradient(transparent, #172523 28%); }
+.sheet .rules li { font-size: 0.95rem; padding-top: 10px; padding-bottom: 10px; }
+
 /* ---------- win ---------- */
 .win { text-align: center; align-items: center; gap: 14px; }
 .win .who { font-family: var(--stencil); font-weight: 700; font-size: 2.500rem; text-transform: uppercase; color: var(--lamp); line-height: 1; overflow-wrap: anywhere; text-shadow: 0 3px 0 #000, 0 0 30px rgba(242, 182, 60, 0.5); animation: heartbeat 1.400s infinite; }
