@@ -135,7 +135,8 @@ function build(Phaser: any, parent: HTMLElement): void {
         speedX: { min: 6, max: 20 },
         speedY: { min: -3, max: 3 },
         scale: { min: 4, max: 9 },
-        alpha: { onUpdate: (_p: any, _k: string, t: number) => 0.05 * Math.sin(Math.PI * t) },
+        // onEmit matters: without it a new particle is drawn at full opacity for one frame, a visible flash.
+        alpha: { onEmit: () => 0, onUpdate: (_p: any, _k: string, t: number) => 0.05 * Math.sin(Math.PI * t) },
         tint: [0x9aa58c, 0x7d8a86, 0xb9a57c],
         frequency: 700,
       });
@@ -147,7 +148,7 @@ function build(Phaser: any, parent: HTMLElement): void {
         speedY: { min: -14, max: -4 },
         speedX: { min: -6, max: 6 },
         scale: { min: 0.08, max: 0.22 },
-        alpha: { onUpdate: (_p: any, _k: string, t: number) => 0.5 * Math.sin(Math.PI * t) },
+        alpha: { onEmit: () => 0, onUpdate: (_p: any, _k: string, t: number) => 0.5 * Math.sin(Math.PI * t) },
         tint: 0xf2c86a,
         blendMode: ADD,
         frequency: 260,

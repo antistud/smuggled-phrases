@@ -32,8 +32,12 @@
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { height: 100%; margin: 0; }
+/* The page itself never scrolls or rubber-bands: only the lists inside it do. */
+html, body { height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none; }
 body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
   background: var(--soot);
   color: var(--paper);
   font-family: var(--ui);
@@ -47,14 +51,14 @@ body {
 }
 /* The inside of a shipping container at night: ribbed steel, rust runs, one bad lamp. */
 #app {
-  height: 100vh;
-  height: 100dvh;
+  height: 100%;
   max-width: 480px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   position: relative;
   overflow: hidden;
+  overflow: clip; /* unlike hidden, cannot be scrolled by focus or scrollIntoView */
   background:
     radial-gradient(90% 55% at 50% -5%, rgba(242, 182, 60, 0.2), transparent 70%),
     radial-gradient(40% 30% at 12% 70%, rgba(181, 83, 42, 0.22), transparent 70%),
@@ -83,7 +87,7 @@ h1, h2, h3, p { margin: 0; }
 
 /* ---------- shared pieces ---------- */
 @keyframes screenin { from { opacity: 0; transform: translateY(18px) scale(0.985); } }
-.screen { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: calc(var(--safe-t) + 12px) calc(var(--safe-r) + 16px) calc(var(--safe-b) + 16px) calc(var(--safe-l) + 16px); overflow-y: auto; -webkit-overflow-scrolling: touch; animation: screenin 0.32s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+.screen { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: calc(var(--safe-t) + 12px) calc(var(--safe-r) + 16px) calc(var(--safe-b) + 16px) calc(var(--safe-l) + 16px); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; animation: screenin 0.32s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
 .stencil { font-family: var(--stencil); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
 .marker { font-family: var(--marker); }
 .label { font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; opacity: 0.8; }
@@ -270,7 +274,7 @@ h1, h2, h3, p { margin: 0; }
 .banner .stencil { font-size: 1.05rem; }
 
 .handwrap { flex: 1; min-height: 0; position: relative; }
-.hand { height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 6px calc(var(--safe-r) + 14px) 18px calc(var(--safe-l) + 14px); display: flex; flex-direction: column; gap: 12px; }
+.hand { height: 100%; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 6px calc(var(--safe-r) + 14px) 18px calc(var(--safe-l) + 14px); display: flex; flex-direction: column; gap: 12px; }
 
 @keyframes dealin { 0% { transform: translate(110%, -30px) rotate(18deg); opacity: 0; } 70% { transform: translate(-2%, 0) rotate(calc(var(--tilt, 0deg) - 1.500deg)); opacity: 1; } 100% { transform: rotate(var(--tilt, 0deg)); } }
 .card { display: grid; grid-template-columns: 1fr auto; flex: none; transform: rotate(var(--tilt, 0deg)); animation: dealin 0.42s cubic-bezier(0.2, 0.8, 0.3, 1) both; transition: box-shadow 0.2s; }
@@ -358,7 +362,7 @@ h1, h2, h3, p { margin: 0; }
 .scrim { position: absolute; inset: 0; background: rgba(6, 5, 3, 0.78); z-index: 20; display: flex; flex-direction: column; justify-content: flex-end; animation: fade 0.15s ease-out; }
 @keyframes fade { from { opacity: 0; } }
 @keyframes rise { from { transform: translateY(60px); opacity: 0; } }
-.sheet { border-radius: 14px 14px 0 0; padding: 14px calc(var(--safe-r) + 16px) calc(var(--safe-b) + 16px) calc(var(--safe-l) + 16px); max-height: 88%; overflow-y: auto; animation: rise 0.26s cubic-bezier(0.2, 0.9, 0.3, 1.1); display: flex; flex-direction: column; gap: 12px;
+.sheet { border-radius: 14px 14px 0 0; padding: 14px calc(var(--safe-r) + 16px) calc(var(--safe-b) + 16px) calc(var(--safe-l) + 16px); max-height: 88%; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; animation: rise 0.26s cubic-bezier(0.2, 0.9, 0.3, 1.1); display: flex; flex-direction: column; gap: 12px;
   background: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.25) 0 3px, transparent 3px 26px), linear-gradient(180deg, #2c4a44, #172523); box-shadow: 0 -4px 0 var(--lamp), 0 -14px 40px rgba(0, 0, 0, 0.7); }
 .sheet h3 { font-family: var(--stencil); font-size: 1.550rem; letter-spacing: 0.05em; text-transform: uppercase; text-shadow: 0 2px 0 #000; }
 .sheet .grab { width: 44px; height: 5px; border-radius: 3px; background: rgba(228, 213, 177, 0.3); margin: 0 auto 2px; flex: none; }
