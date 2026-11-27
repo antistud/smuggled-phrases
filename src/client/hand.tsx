@@ -40,6 +40,13 @@ function CardView(props: { card: Card; index: number; clock: number; paused: boo
     );
   };
 
+  // "Failed": I got caught on this one. Offline it is dealt with on the spot; in a
+  // room the hand screen first asks who made the catch, so they get their coin.
+  const failed = () => {
+    if (props.offline) stampThen('seized', () => session.caught(card.id));
+    else props.onCaught(card);
+  };
+
   const live = isLive(card, clock);
   const done = isCleared(card, clock);
   const left = remainingMs(card, clock);
@@ -75,17 +82,23 @@ function CardView(props: { card: Card; index: number; clock: number; paused: boo
         {done && <div class="hint">{isCatchphrase ? 'Nobody noticed. Count it and go again.' : `${gloatFor(card.id)} Show it, then stamp it.`}</div>}
       </div>
       {!live && !done && (
-        <button
-          class="act"
-          onClick={() => {
-            sfx.flick();
-            buzz(15);
-            session.declare(card.id);
-          }}
-          aria-label={`I said: ${card.text}`}
-        >
-          I said it
-        </button>
+        <div class="acts">
+          <button
+            class="act"
+            onClick={() => {
+              sfx.flick();
+              buzz(15);
+              session.declare(card.id);
+            }}
+            aria-label={`Said it: start the 30 seconds for ${card.text}`}
+          >
+            Said it
+            <small>start 30s</small>
+          </button>
+          <button class="fail" onClick={failed} disabled={props.paused} aria-label={`Failed: I got caught saying ${card.text}`}>
+            Failed
+          </button>
+        </div>
       )}
       {live && (
         <div class={`clock ${secs <= 5 && burning ? 'tense' : ''}`} role="timer" aria-label={`${secs} seconds left`}>
@@ -109,9 +122,8 @@ function CardView(props: { card: Card; index: number; clock: number; paused: boo
       {(live || done) && !props.paused && !stamp && (
         <div class="extras">
           {live && <button onClick={() => session.undeclare(card.id)}>Undo: I didn’t say it</button>}
-          {/* Offline it is seized on the spot; in a synced room you first say who caught you. */}
-          <button class="danger" onClick={() => (props.offline ? stampThen('seized', () => session.caught(card.id)) : props.onCaught(card))}>
-            {live ? 'I got caught' : 'I was caught in time'}
+          <button class="danger" onClick={failed}>
+            {live ? 'Failed: I got caught' : 'Failed: caught in time'}
           </button>
         </div>
       )}
@@ -137,6 +149,9 @@ export function Hand(props: { session: Session; state: SessionState; onScores: (
   /** Synced: the phrase you are admitting was caught, while you pick who caught it. */
   const [owningUp, setOwningUp] = useState<Card | null>(null);
   const [splash, setSplash] = useState<string | null>(null);
+  const [spending, setSpending] = useState(false);
+  const [coinFlip, setCoinFlip] = useState(0);
+  const coinChip = useRef<HTMLButtonElement>(null);
 
   /** Everything that can be on the clock: the catchphrase and the hand. */
   const inPlay = you.catchphrase ? [you.catchphrase, ...you.hand] : you.hand;
@@ -222,6 +237,26 @@ export function Hand(props: { session: Session; state: SessionState; onScores: (
     tally.current = { smuggled: you.smuggled.length, seized: you.seized };
   }, [you.smuggled.length, you.seized]);
 
+  // A bounty coin lands whenever you catch someone. It just collects; spend it when you like.
+  const coins = you.swapCredits;
+  const lastCoins = useRef(coins);
+  useEffect(() => {
+    const gained = coins > lastCoins.current;
+    lastCoins.current = coins;
+    if (!gained) return;
+    setCoinFlip((n) => n + 1);
+    sfx.coin();
+    buzz([30, 40, 30]);
+    const done = setTimeout(() => {
+      fx.sparksAt(coinChip.current, 0.5, 14);
+      setCoinFlip(0);
+    }, 1150);
+    return () => clearTimeout(done);
+  }, [coins]);
+  useEffect(() => {
+    if (coins === 0) setSpending(false);
+  }, [coins]);
+
   const liveCards = inPlay.filter((c) => isLive(c, clock));
   const doneCount = inPlay.filter((c) => isCleared(c, clock)).length;
   const soonest = liveCards.length ? Math.min(...liveCards.map((c) => remainingMs(c, clock))) : 0;
@@ -239,6 +274,14 @@ export function Hand(props: { session: Session; state: SessionState; onScores: (
         </button>
         <div class="spacer" />
         {state.mode === 'sync' && state.connection !== 'online' && <span class="conn">Reconnecting</span>}
+        <button ref={coinChip} class={`coins ${coins > 0 ? 'has' : ''}`} key={`c${coins}`} disabled={coins === 0} onClick={() => { sfx.flick(); setSpending(true); }}
+          aria-label={coins > 0 ? `${coins} bounty ${coins === 1 ? 'coin' : 'coins'}. Tap to swap a phrase.` : 'No bounty coins yet. Catch someone to earn one.'}>
+          <span class="coin" aria-hidden="true" />
+          <span>
+            <b>{coins}</b>
+            <span class="label" style="display:block">bounty</span>
+          </span>
+        </button>
         <div style="text-align:right">
           <Badges left={you.badges} />
           <span class="label" style="display:block">{you.badges > 0 ? 'badges' : 'no calls left'}</span>
@@ -297,6 +340,15 @@ export function Hand(props: { session: Session; state: SessionState; onScores: (
         </button>
       </div>
 
+      {coinFlip > 0 && (
+        <div class="coinflip" key={coinFlip} aria-hidden="true">
+          <span class="spin">
+            <span class="coin big" />
+          </span>
+          <span class="plus stencil">+1 bounty</span>
+        </div>
+      )}
+
       {splash !== null && (
         <div class="splash" aria-hidden="true">
           <span>
@@ -309,7 +361,7 @@ export function Hand(props: { session: Session; state: SessionState; onScores: (
       {calling && offline && (
         <Sheet title="You called Contraband!" onClose={() => setCalling(false)}>
           <p class="muted">You must have said the phrase you suspected, out loud, inside their 30 seconds. Did they admit it?</p>
-          <button class="btn green" onClick={() => { session.caughtSomeone(); recordProgress('offline', { busts: 1 }); setCalling(false); raid('Busted. Nice nose.'); }}>Yes, I caught them</button>
+          <button class="btn green" onClick={() => { session.caughtSomeone(); recordProgress('offline', { busts: 1 }); setCalling(false); }}>Yes, I caught them</button>
           <button class="btn red" onClick={() => { session.wrongCall(); recordProgress('offline', { wrongCalls: 1 }); setCalling(false); sfx.buzzer(); fx.shake(true); buzz(120); }}>
             No, wrong call
           </button>
@@ -322,7 +374,7 @@ export function Hand(props: { session: Session; state: SessionState; onScores: (
         <Sheet title="Who caught you?" onClose={() => setOwningUp(null)}>
           <p>
             <em style="font-family:var(--typed);font-style:normal">“{owningUp.text}”</em>{' '}
-            {owningUp.id === you.catchphrase?.id ? 'is your catchphrase, so you keep it, but this one does not count.' : 'will be seized and replaced with a new phrase.'} Whoever caught you earns a swap.
+            {owningUp.id === you.catchphrase?.id ? 'is your catchphrase, so you keep it, but this one does not count.' : 'will be seized and replaced with a new phrase.'} Whoever caught you earns a bounty coin.
           </p>
           {state.players.filter((p) => p.id !== you.id).map((p) => (
             <button key={p.id} class="pick" onClick={() => { sfx.thud(); session.caught(owningUp.id, p.id); setOwningUp(null); }}>
@@ -330,7 +382,8 @@ export function Hand(props: { session: Session; state: SessionState; onScores: (
               <span class="stamp" style="font-size:.7rem;border-width:3px;padding:2px 6px">Caught me</span>
             </button>
           ))}
-          <button class="btn ghost" onClick={() => setOwningUp(null)}>Never mind</button>
+          <button class="btn ghost" onClick={() => { sfx.thud(); session.caught(owningUp.id); setOwningUp(null); }}>Nobody in particular</button>
+          <button class="btn ghost" onClick={() => setOwningUp(null)}>Never mind, I wasn’t caught</button>
         </Sheet>
       )}
 
@@ -380,16 +433,18 @@ export function Hand(props: { session: Session; state: SessionState; onScores: (
         </Sheet>
       )}
 
-      {!accused && you.swapCredits > 0 && !splash && (
-        <Sheet title="Good catch! Swap a phrase?">
-          <p class="muted">Trade one phrase you are stuck with for a fresh one, or keep your stash.</p>
+      {spending && coins > 0 && !accused && (
+        <Sheet title="Spend a bounty coin" onClose={() => setSpending(false)}>
+          <p class="muted">
+            You have {coins} {coins === 1 ? 'coin' : 'coins'}. One coin swaps a phrase you are stuck with for a fresh one.
+          </p>
           {you.hand.map((c) => (
-            <button key={c.id} class="pick" disabled={c.saidAt !== null || state.pileCount === 0} onClick={() => { sfx.flick(); session.swap(c.id); }}>
+            <button key={c.id} class="pick" disabled={c.saidAt !== null || state.pileCount === 0} onClick={() => { sfx.coin(); session.swap(c.id); setSpending(false); }}>
               <span style="flex:1">{c.text}</span>
               {c.saidAt !== null && <small>in play</small>}
             </button>
           ))}
-          <button class="btn ghost" onClick={() => session.swap(null)}>Keep my hand</button>
+          <button class="btn ghost" onClick={() => setSpending(false)}>Save it for later</button>
         </Sheet>
       )}
     </div>

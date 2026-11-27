@@ -11,7 +11,7 @@ import { load, save } from './storage';
 import { sfx } from './sfx';
 import { buzz, Toasts, useSession, type Toast } from './ui';
 
-type Route = { name: 'home' } | { name: 'setup'; kind: 'create' | 'join'; code?: string; forceSync?: boolean } | { name: 'howto'; back: Route } | { name: 'game' } | { name: 'account' };
+type Route = { name: 'home' } | { name: 'setup'; kind: 'create' | 'join'; code?: string; forceSync?: boolean } | { name: 'howto'; back: Route; inGame?: boolean } | { name: 'game' } | { name: 'account' };
 
 /** ?room=CODE from an invite link or QR code. */
 function invitedRoom(): string {
@@ -224,7 +224,7 @@ export function App() {
 
   let screen;
   if (route.name === 'howto') {
-    screen = <HowTo onBack={() => setRoute(route.back)} />;
+    screen = <HowTo settings={route.inGame && session ? session.state.settings : undefined} onBack={() => setRoute(route.back)} />;
   } else if (!me) {
     // Nobody plays without signing in. The route is kept, so an invite link carries on afterwards.
     screen = <AccountScreen onHowTo={() => setRoute({ name: 'howto', back: route })} />;
@@ -233,7 +233,7 @@ export function App() {
   } else if (route.name === 'setup') {
     screen = <Setup kind={route.kind} code={route.code} forceSync={route.forceSync} onBack={home} onSession={adopt} />;
   } else if (route.name === 'game' && session) {
-    screen = <Game key={session.id} session={session} onLeave={leave} onHome={home} onHowTo={() => setRoute({ name: 'howto', back: { name: 'game' } })} onOver={() => setToasts([])} />;
+    screen = <Game key={session.id} session={session} onLeave={leave} onHome={home} onHowTo={() => setRoute({ name: 'howto', back: { name: 'game' }, inGame: true })} onOver={() => setToasts([])} />;
   } else {
     screen = (
       <Home
@@ -327,7 +327,7 @@ function Game(props: { session: Session; onLeave: () => void; onHome: () => void
   return (
     <>
       <Hand session={session} state={state} onScores={() => setScores(true)} />
-      {rules && <RulesSheet onClose={closeRules} />}
+      {rules && <RulesSheet settings={state.settings} onClose={closeRules} />}
       {scores && <Scoreboard session={session} state={state} onClose={() => setScores(false)} onHowTo={props.onHowTo} onLeave={props.onLeave} onHome={props.onHome} />}
     </>
   );

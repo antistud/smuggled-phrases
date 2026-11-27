@@ -59,21 +59,153 @@ describe('rooms', () => {
 
   it('lets the host set phrase count and spiciness, clamped to sane values', () => {
     let room = must(null, 'dev-a', { t: 'hello', v: 3, deviceId: 'dev-a', name: 'Ada', create: { packs: ['core'], handSize: 7, spice: 4 } });
-    expect(room.settings).toEqual({ handSize: 7, spice: 4 });
+    expect(room.settings).toEqual({ handSize: 7, spice: 4, catchphrase: false });
     room = must(room, 'dev-b', hello('dev-b', 'Bo'));
     expect(send(room, 'dev-b', { t: 'configure', options: { packs: ['core'], handSize: 3 } }).error?.code).toBe('not-host');
     room = must(room, 'dev-a', { t: 'configure', options: { packs: ['core', 'travel', 'bogus'], handSize: 99, spice: 0 } });
-    expect(room.settings).toEqual({ handSize: 8, spice: 1 });
+    expect(room.settings).toEqual({ handSize: 8, spice: 1, catchphrase: false });
     expect(room.packs).toEqual(['core', 'travel']);
     room = must(room, 'dev-a', { t: 'configure', options: { packs: ['core'], handSize: 4, spice: 5 } });
     room = must(room, 'dev-a', { t: 'start' });
     expect(view(room, 'dev-b').you.hand).toHaveLength(4);
-    expect(view(room, 'dev-b').settings).toEqual({ handSize: 4, spice: 5 });
+    expect(view(room, 'dev-b').settings).toEqual({ handSize: 4, spice: 5, catchphrase: false });
     expect(send(room, 'dev-a', { t: 'configure', options: { packs: ['core'], spice: 1 } }).error?.code).toBe('wrong-phase');
     // Inferno: the dealt hands lean hard but are still a mix overall.
     const heats = Object.values(room.game!.players).flatMap((p) => p.hand.map((c) => c.heat));
     expect(heats.filter((h) => h === 3).length).toBeGreaterThan(heats.length / 2);
     expect(new Set([...heats, ...room.game!.pile.slice(0, 20).map((p) => p.heat)]).size).toBe(3);
+  });
+
+  it('catchphrases are an add-on: off unless the host turns them on', () => {
+    // Off by default.
+    let room = must(lobby(), 'dev-a', { t: 'start' });
+    expect(room.settings.catchphrase).toBe(false);
+    expect(view(room, 'dev-a').you.catchphrase).toBeNull();
+    expect(view(room, 'dev-a').you.hand).toHaveLength(HAND_SIZE);
+    // Late joiners do not get one either.
+    room = must(room, 'dev-d', hello('dev-d', 'Dee'));
+    expect(room.game!.players.p4.catchphrase ?? null).toBeNull();
+
+    // Turned on when creating the room...
+    let on = must(null, 'dev-a', { t: 'hello', v: 3, deviceId: 'dev-a', name: 'Ada', create: { packs: ['core'], catchphrase: true } });
+    on = must(on, 'dev-b', hello('dev-b', 'Bo'));
+    on = must(on, 'dev-a', { t: 'start' });
+    expect(view(on, 'dev-a').you.catchphrase?.heat).toBe(1);
+    expect(view(on, 'dev-a').you.hand).toHaveLength(HAND_SIZE);
+    // ...or later, from the lobby, but not mid-game.
+    expect(send(on, 'dev-a', { t: 'configure', options: { packs: ['core'], catchphrase: false } }).error?.code).toBe('wrong-phase');
+    let later = must(lobby(), 'dev-a', { t: 'configure', options: { packs: ['core'], catchphrase: true } });
+    later = must(later, 'dev-a', { t: 'start' });
+    expect(view(later, 'dev-c').you.catchphrase).not.toBeNull();
+  });
+
+  it('never deals the same phrase twice in a game, to anyone', () => {
+    let room = must(null, 'dev-a', { t: 'hello', v: 3, deviceId: 'dev-a', name: 'Ada', create: { packs: ['core', 'travel'], catchphrase: true, handSize: 8 } });
+    for (let i = 2; i <= 8; i++) room = must(room, `dev-${i}`, hello(`dev-${i}`, `P${i}`));
+    room = must(room, 'dev-a', { t: 'start' });
+    const seen = new Map<string, string>();
+    const note = (who: string, id: string, text: string) => {
+      const key = text.toLowerCase();
+      expect(seen.has(key), `"${text}" given to ${seen.get(key)} and ${who}`).toBe(false);
+      seen.set(key, who);
+      expect(id).toBeTruthy();
+    };
+    const holding = new Set<string>();
+    const sweep = () => {
+      for (const p of Object.values(room.game!.players)) {
+        for (const c of [...p.hand, ...(p.catchphrase ? [p.catchphrase] : [])]) {
+          if (!holding.has(c.id)) {
+            holding.add(c.id);
+            note(p.id, c.id, c.text);
+          }
+        }
+      }
+    };
+    sweep();
+    // Churn through a few hundred replacement draws, swaps and penalty draws.
+    const devs = room.members.map((m) => m.deviceId);
+    for (let round = 0; round < 60; round++) {
+      for (let i = 0; i < devs.length; i++) {
+        const me = room.members[i].id;
+        const other = room.members[(i + 1) % devs.length];
+        const hand = room.game!.players[me].hand;
+        room = must(room, devs[i], { t: 'caught', cardId: hand[round % hand.length].id, catcherId: other.id });
+        if (room.game!.players[other.id].swapCredits > 0 && round % 2 === 0) {
+          room = must(room, other.deviceId, { t: 'swap', cardId: room.game!.players[other.id].hand[0].id });
+        }
+        sweep();
+      }
+    }
+    expect(seen.size).toBeGreaterThan(400);
+  });
+
+  it('a re-deal in the same room never repeats a phrase from an earlier game', () => {
+    let room = must(null, 'dev-a', { t: 'hello', v: 3, deviceId: 'dev-a', name: 'Ada', create: { packs: ['core'], handSize: 8, spice: 3, catchphrase: true } });
+    for (let i = 2; i <= 6; i++) room = must(room, `dev-${i}`, hello(`dev-${i}`, `P${i}`));
+    const showing = (r: Room) => Object.values(r.game!.players).flatMap((p) => [...p.hand, ...(p.catchphrase ? [p.catchphrase] : [])].map((c) => c.id));
+    const everShown = new Set<string>();
+    for (let game = 0; game < 8; game++) {
+      room = must(room, 'dev-a', { t: game === 0 ? 'start' : 'again' });
+      for (const id of showing(room)) {
+        expect(everShown.has(id), `game ${game + 1} repeated ${id}`).toBe(false);
+        everShown.add(id);
+      }
+      // Phrases drawn mid-game count as shown too.
+      for (let i = 0; i < 5; i++) {
+        room = must(room, 'dev-a', { t: 'caught', cardId: room.game!.players.p1.hand[0].id });
+        const drawn = room.game!.players.p1.hand[0].id;
+        expect(everShown.has(drawn), `game ${game + 1} redrew ${drawn}`).toBe(false);
+        everShown.add(drawn);
+      }
+    }
+    expect(everShown.size).toBe(8 * (6 * 9 + 5));
+  });
+
+  it('only reuses phrases once the packs have truly run out, and never within one deal', () => {
+    // The travel pack has just 40 phrases; ten players' worth of games burns through it.
+    let room = must(null, 'dev-a', { t: 'hello', v: 3, deviceId: 'dev-a', name: 'Ada', create: { packs: ['travel'], handSize: 5, spice: 2 } });
+    room = must(room, 'dev-b', hello('dev-b', 'Bo'));
+    const dealt = (r: Room) => Object.values(r.game!.players).flatMap((p) => p.hand.map((c) => c.id));
+    const everShown = new Set<string>();
+    for (let game = 0; game < 12; game++) {
+      room = must(room, 'dev-a', { t: game === 0 ? 'start' : 'again' });
+      const ids = dealt(room);
+      expect(new Set(ids).size).toBe(10);
+      expect(new Set(room.game!.pile.map((p) => p.id)).size).toBe(30);
+      // While unseen phrases remain in a difficulty, that difficulty deals only unseen ones.
+      const unseenByHeat = new Map<number, number>();
+      for (const p of [...room.game!.pile, ...Object.values(room.game!.players).flatMap((pl) => pl.hand)]) {
+        if (!everShown.has(p.id)) unseenByHeat.set(p.heat, (unseenByHeat.get(p.heat) ?? 0) + 1);
+      }
+      for (const p of Object.values(room.game!.players).flatMap((pl) => pl.hand)) {
+        const repeatsAllowed = (unseenByHeat.get(p.heat) ?? 0) < ids.length;
+        if (everShown.has(p.id)) expect(repeatsAllowed, `game ${game + 1}: ${p.id} repeated while new ones were left`).toBe(true);
+      }
+      ids.forEach((id) => everShown.add(id));
+    }
+    expect(everShown.size).toBe(40);
+  });
+
+  it('"Failed" works on a phrase that was never started, names the catcher and pays a coin', () => {
+    let room = must(lobby(), 'dev-a', { t: 'start' });
+    const card = view(room, 'dev-a').you.hand[2];
+    expect(card.saidAt).toBeNull();
+    const out = send(room, 'dev-a', { t: 'caught', cardId: card.id, catcherId: 'p2' });
+    expect(out.news).toEqual([{ kind: 'seized', name: 'Ada', by: 'Bo', text: card.text }]);
+    expect(out.awards).toEqual([
+      { memberId: 'p1', delta: { seized: 1 } },
+      { memberId: 'p2', delta: { busts: 1 } },
+    ]);
+    room = out.room!;
+    expect(view(room, 'dev-a').you.hand).toHaveLength(HAND_SIZE);
+    expect(view(room, 'dev-b').you.swapCredits).toBe(1);
+    // Nobody named: seized all the same, no coin for anyone.
+    const again = send(room, 'dev-a', { t: 'caught', cardId: view(room, 'dev-a').you.hand[0].id });
+    expect(again.news[0]).toMatchObject({ kind: 'seized', by: null });
+    expect(view(again.room!, 'dev-b').you.swapCredits).toBe(1);
+    // Naming yourself earns nothing.
+    const self = send(room, 'dev-a', { t: 'caught', cardId: view(room, 'dev-a').you.hand[0].id, catcherId: 'p1' });
+    expect(view(self.room!, 'dev-a').you.swapCredits).toBe(0);
   });
 
   it('lets a player change their name at any time, keeping names unique', () => {
@@ -140,8 +272,6 @@ describe('rooms', () => {
   it('lets a player own up to being caught, crediting whoever caught them', () => {
     let room = must(lobby(), 'dev-a', { t: 'start' });
     const [card, other] = view(room, 'dev-a').you.hand;
-    // Not said yet: nothing to own up to.
-    expect(send(room, 'dev-a', { t: 'caught', cardId: card.id, catcherId: 'p2' }).error).toEqual({ code: 'rule', detail: 'not-declared' });
     room = must(room, 'dev-a', { t: 'declare', cardId: card.id });
     const out = send(room, 'dev-a', { t: 'caught', cardId: card.id, catcherId: 'p2' }, T0 + 4000);
     expect(out.news).toEqual([{ kind: 'seized', name: 'Ada', by: 'Bo', text: card.text }]);

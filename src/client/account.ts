@@ -96,7 +96,10 @@ export const account = {
   /** Step one. In local development the server hands the link and code straight back. */
   async requestLink(email: string): Promise<{ ok: true; dev?: { link: string; code: string } } | { ok: false; error: string }> {
     const reply = await call('/api/auth/request', { email });
-    return reply.ok ? { ok: true, dev: reply.dev } : reply;
+    if (!reply.ok) return reply;
+    // Development only: the local Worker answers as its production hostname, so point the link back here.
+    const dev = reply.dev ? { code: reply.dev.code, link: `${location.origin}/${new URL(reply.dev.link).search}` } : undefined;
+    return { ok: true, dev };
   },
 
   /** Step two, from the emailed link (`token`) or the typed code. */

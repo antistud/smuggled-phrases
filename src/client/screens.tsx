@@ -349,7 +349,7 @@ export function Chillies(props: { count: number }) {
 
 /** Hand size and spiciness, with the easy / medium / hard split drawn as a bar. */
 function SettingsPicker(props: { value: GameSettings; onChange: (s: GameSettings) => void }) {
-  const { handSize, spice } = props.value;
+  const { handSize, spice, catchphrase } = props.value;
   const level = spiceLevel(spice);
   const set = (patch: Partial<GameSettings>) => {
     sfx.flick();
@@ -388,21 +388,41 @@ function SettingsPicker(props: { value: GameSettings; onChange: (s: GameSettings
         </div>
         <p class="marker spiceblurb">{level.blurb}</p>
       </div>
+      <div class="field">
+        <span class="label">Add-ons</span>
+        <button class="toggle" role="switch" aria-checked={catchphrase} onClick={() => set({ catchphrase: !catchphrase })}>
+          <span class="sw" />
+          <span>
+            <strong>Catchphrases {catchphrase ? 'on' : 'off'}</strong>
+            <small>
+              {catchphrase
+                ? 'Everyone also gets one easy phrase to say again and again, counted each time it gets through.'
+                : 'Optional extra for experienced tables: a bonus phrase you can repeat all game. Off keeps things simple.'}
+            </small>
+          </span>
+        </button>
+      </div>
     </>
   );
 }
 
 function settingsSummary(s: GameSettings): string {
   const level = spiceLevel(s.spice);
-  return `${s.handSize} phrases each · ${level.name} (${level.mix.easy}/${level.mix.medium}/${level.mix.hard})`;
+  return `${s.handSize} phrases each · ${level.name} (${level.mix.easy}/${level.mix.medium}/${level.mix.hard})${s.catchphrase ? ' · catchphrases on' : ''}`;
 }
+
+/**
+ * Offline (no-network, honor-system) games are switched off: every game is a
+ * synced room. The code for them is intact; flip this to bring the option back.
+ */
+const OFFLINE_MODE_ENABLED = false;
 
 export function Setup(props: { kind: 'create' | 'join'; code?: string; forceSync?: boolean; onBack: () => void; onSession: (s: Session) => void }) {
   const creating = props.kind === 'create';
-  const [mode, setMode] = useState<'sync' | 'offline'>(props.forceSync || navigator.onLine ? 'sync' : 'offline');
+  const [mode, setMode] = useState<'sync' | 'offline'>(!OFFLINE_MODE_ENABLED || props.forceSync || navigator.onLine ? 'sync' : 'offline');
   const [name, setName] = useState(() => account.current?.name || (load<string>('name') ?? ''));
   const [packs, setPacks] = useState<string[]>(DEFAULT_PACK_IDS);
-  const [settings, setSettings] = useState<GameSettings>(() => ({ ...DEFAULT_SETTINGS, ...(load<GameSettings>('settings') ?? {}) }));
+  const [settings, setSettings] = useState<GameSettings>(() => ({ ...DEFAULT_SETTINGS, ...(load<GameSettings>('gameSettings') ?? {}) }));
   const [code, setCode] = useState(() => (creating ? randomCode() : props.code ?? ''));
   const [number, setNumber] = useState<number | null>(null);
 
@@ -411,7 +431,7 @@ export function Setup(props: { kind: 'create' | 'join'; code?: string; forceSync
 
   const go = () => {
     if (!ready) return;
-    save('settings', settings);
+    save('gameSettings', settings);
     if (mode === 'sync') {
       save('name', name.trim());
       props.onSession(creating ? SyncSession.host(name.trim(), packs, settings) : SyncSession.join(validCode, name.trim()));
@@ -424,15 +444,20 @@ export function Setup(props: { kind: 'create' | 'join'; code?: string; forceSync
     <div class="screen">
       <TopBar title={creating ? 'Start a game' : 'Join a game'} onBack={props.onBack} />
       <div class="stack" style="gap:16px">
-        <div class="seg" role="group" aria-label="Game type">
-          <button aria-pressed={mode === 'sync'} onClick={() => setMode('sync')}>Synced room</button>
-          <button aria-pressed={mode === 'offline'} onClick={() => setMode('offline')}>Offline</button>
-        </div>
-        <p class="muted" style="font-size:.92rem">
-          {mode === 'sync'
-            ? 'Needs internet. Live scoreboard, and the app settles every “Contraband!” call.'
-            : 'No signal needed. Everyone types the same code and scores on the honor system.'}
-        </p>
+        {OFFLINE_MODE_ENABLED && (
+          <>
+            <div class="seg" role="group" aria-label="Game type">
+              <button aria-pressed={mode === 'sync'} onClick={() => setMode('sync')}>Synced room</button>
+              <button aria-pressed={mode === 'offline'} onClick={() => setMode('offline')}>Offline</button>
+            </div>
+            <p class="muted" style="font-size:.92rem">
+              {mode === 'sync'
+                ? 'Needs internet. Live scoreboard, and the app settles every “Contraband!” call.'
+                : 'No signal needed. Everyone types the same code and scores on the honor system.'}
+            </p>
+          </>
+        )}
+        {!navigator.onLine && <p class="note bad">You look offline. You need a connection to open or join a room.</p>}
 
         {!creating && (
           <label class="field">
@@ -616,7 +641,7 @@ export function Scoreboard(props: { session: Session; state: SessionState; onClo
               <th>Left</th>
               <th>Badges</th>
               <th>Cleared</th>
-              <th title="Times their catchphrase got through uncaught">Catch</th>
+              {state.settings.catchphrase && <th title="Times their catchphrase got through uncaught">Catch</th>}
             </tr>
           </thead>
           <tbody>
@@ -641,7 +666,7 @@ export function Scoreboard(props: { session: Session; state: SessionState; onClo
                 <td>{p.cards}</td>
                 <td><Badges left={p.badges} /></td>
                 <td>{p.smuggled}</td>
-                <td>{p.catchCount ? `×${p.catchCount}` : '–'}</td>
+                {state.settings.catchphrase && <td>{p.catchCount ? `×${p.catchCount}` : '–'}</td>}
               </tr>
             ))}
           </tbody>
@@ -716,17 +741,26 @@ export function Win(props: { session: Session; state: SessionState; onLeave: () 
 
 // ------------------------------------------------------------ how to play
 
-export function RuleList() {
+/** The rules, written for the game being played: its hand size and whether catchphrases are on. */
+export function RuleList(props: { settings?: GameSettings }) {
+  const settings = props.settings ?? DEFAULT_SETTINGS;
+  const fixed = !!props.settings;
   return (
     <ol class="rules">
-      <li class="paper">You start with <b>5 secret phrases</b> (the host can pick 3 to 8, and how spicy they are). Keep your phone to yourself.</li>
-      <li class="paper">Work a phrase into the conversation <b>out loud</b>, then tap <b>I said it</b> on that card. A private 30-second countdown starts.</li>
+      <li class="paper">
+        You start with <b>{settings.handSize} secret phrases</b>
+        {fixed ? '' : ' (the host can pick 3 to 8, and how spicy they are)'}. Keep your phone to yourself.
+      </li>
+      <li class="paper">Work a phrase into the conversation <b>out loud</b>, then tap <b>Said it</b> on that card. A private 30-second countdown starts.</li>
       <li class="paper">If nobody calls it in 30 seconds, shout <b>“Smuggled!”</b>, show the card, and clear it from your hand.</li>
       <li class="paper">Think someone just smuggled? Shout <b>“Contraband!”</b> within the 30 seconds <b>and repeat the phrase</b>. Pointing at a person is not enough.</li>
-      <li class="paper">Caught: the phrase is <b>seized</b> and replaced with a new one. The catcher may swap one of their own phrases.</li>
+      <li class="paper">Caught: tap <b>Failed</b> on that card. The phrase is <b>seized</b> and replaced with a new one, and the catcher earns a <b>bounty coin</b>.</li>
+      <li class="paper">Each <b>bounty coin</b> swaps one of your phrases for a fresh one, whenever you like. Coins pile up until you spend them.</li>
       <li class="paper">Wrong call: the caller <b>draws an extra phrase</b> and loses one of their <b>3 inspector badges</b>. No badges, no calling. Bluffing with odd sentences to drain badges is fair play.</li>
-      <li class="paper">You also get one <b>catchphrase</b>. Say it as often as you dare: it never leaves your hand, and every time it survives 30 seconds your count goes up. Caught? You keep it, but that one does not count.</li>
-      <li class="paper">First player with an <b>empty hand</b> wins. Your catchphrase does not need clearing.</li>
+      {settings.catchphrase && (
+        <li class="paper">You also get one <b>catchphrase</b>. Say it as often as you dare: it never leaves your hand, and every time it survives 30 seconds your count goes up. Caught? You keep it, but that one does not count.</li>
+      )}
+      <li class="paper">First player with an <b>empty hand</b> wins.{settings.catchphrase ? ' Your catchphrase does not need clearing.' : ''}</li>
       <li class="paper">Phrases must be spoken <b>aloud</b>.</li>
       <li class="paper"><b>Bend a phrase, never break it.</b> You may swap one or two filler words (and, but, or) and rearrange it slightly to suit how people talk where you are, but never change the important details or the spirit of the phrase. Rule of thumb: keep it <b>95% original</b>.</li>
       <li class="paper">Careful: if <b>everyone else disagrees</b> with how you bent it, you are caught.</li>
@@ -735,11 +769,11 @@ export function RuleList() {
 }
 
 /** Shown once, the first time a game starts on this phone. */
-export function RulesSheet(props: { onClose: () => void }) {
+export function RulesSheet(props: { settings: GameSettings; onClose: () => void }) {
   return (
     <Sheet title="Before you smuggle">
       <p class="marker" style="font-size:1.05rem">Thirty seconds of rules. Then act natural.</p>
-      <RuleList />
+      <RuleList settings={props.settings} />
       <div class="stick">
         <button class="btn amber" onClick={props.onClose}>Got it, deal me in</button>
       </div>
@@ -747,14 +781,14 @@ export function RulesSheet(props: { onClose: () => void }) {
   );
 }
 
-export function HowTo(props: { onBack: () => void }) {
+export function HowTo(props: { settings?: GameSettings; onBack: () => void }) {
   return (
     <div class="screen">
       <TopBar title="How to play" onBack={props.onBack} />
       <p class="tagline" style="margin:0 0 14px">Talk normal. Smuggle nonsense. Don’t get searched.</p>
-      <RuleList />
+      <RuleList settings={props.settings} />
       <p class="muted" style="margin:14px 0;font-size:.9rem">
-        Your timers keep running if the phone locks. In a synced room the app tracks the scoreboard and settles calls; offline, it is all on your honor.
+        Your timers keep running if the phone locks, and the app tracks the scoreboard and settles calls for you.
       </p>
       <a
         class="link"

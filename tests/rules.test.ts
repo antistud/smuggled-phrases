@@ -143,13 +143,42 @@ describe('honor-system outcomes (offline mode)', () => {
     let g = createGame(['me'], pile(20));
     const card = g.players.me.hand[1];
     const nextUp = g.pile[0];
-    expect(err(g, { type: 'caught', playerId: 'me', cardId: card.id })).toBe('not-declared');
     g = ok(g, { type: 'declare', playerId: 'me', cardId: card.id, now: T0 }).game;
     g = ok(g, { type: 'caught', playerId: 'me', cardId: card.id }).game;
     expect(g.players.me.hand).toHaveLength(HAND_SIZE);
     expect(g.players.me.hand[1]).toEqual({ ...nextUp, saidAt: null });
     expect(g.players.me.seized.map((p) => p.id)).toEqual([card.id]);
     expect(g.players.me.smuggled).toEqual([]);
+  });
+
+  it('"Failed" works before the timer was ever started, and pays the catcher a bounty coin', () => {
+    let g = createGame(['a', 'b'], pile(40));
+    const card = g.players.a.hand[3];
+    expect(card.saidAt).toBeNull();
+    const r = ok(g, { type: 'caught', playerId: 'a', cardId: card.id, catcherId: 'b' });
+    g = r.game;
+    expect(g.players.a.hand).toHaveLength(HAND_SIZE);
+    expect(g.players.a.hand.some((c) => c.id === card.id)).toBe(false);
+    expect(g.players.a.seized.map((p) => p.id)).toEqual([card.id]);
+    expect(g.players.b.swapCredits).toBe(1);
+    expect(r.events[0]).toMatchObject({ type: 'seized', playerId: 'a', catcherId: 'b' });
+    expect(err(g, { type: 'caught', playerId: 'a', cardId: g.players.a.hand[0].id, catcherId: 'a' })).toBe('self-accuse');
+    expect(err(g, { type: 'caught', playerId: 'a', cardId: g.players.a.hand[0].id, catcherId: 'zz' })).toBe('no-such-player');
+  });
+
+  it('bounty coins pile up and are spent one swap at a time, whenever the player likes', () => {
+    let g = createGame(['a', 'b'], pile(60));
+    for (let i = 0; i < 4; i++) g = ok(g, { type: 'caught', playerId: 'a', cardId: g.players.a.hand[0].id, catcherId: 'b' }).game;
+    expect(g.players.b.swapCredits).toBe(4);
+    // Nothing forces a swap: b can keep playing with coins in the bank.
+    const kept = g.players.b.hand[0].id;
+    g = ok(g, { type: 'declare', playerId: 'b', cardId: kept, now: T0 }).game;
+    g = ok(g, { type: 'smuggle', playerId: 'b', cardId: kept, now: T0 + TIMER_MS }).game;
+    expect(g.players.b.swapCredits).toBe(4);
+    g = ok(g, { type: 'swap', playerId: 'b', cardId: g.players.b.hand[0].id }).game;
+    g = ok(g, { type: 'swap', playerId: 'b', cardId: g.players.b.hand[1].id }).game;
+    expect(g.players.b.swapCredits).toBe(2);
+    expect(g.players.b.hand).toHaveLength(HAND_SIZE - 1);
   });
 
   it('catcher may swap one phrase, or decline (rule 5)', () => {

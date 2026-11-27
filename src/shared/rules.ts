@@ -48,6 +48,8 @@ export interface Accusation {
 export interface Game {
   /** Phrases each player starts with (also used to deal in late joiners). */
   handSize: number;
+  /** Whether players are dealt a catchphrase. Absent on games from before this was a setting (treated as on). */
+  catchphrases?: boolean;
   players: Record<string, Player>;
   /** Draw pile; index 0 is the next card. */
   pile: Phrase[];
@@ -206,8 +208,8 @@ function penalise(game: Game, caller: Player): void {
  * Hands are dealt as whole blocks (not one card at a time around the table) so
  * each one keeps the difficulty blend the pile was mixed with.
  */
-export function createGame(playerIds: readonly string[], pile: readonly Phrase[], handSize: number = HAND_SIZE): Game {
-  const game: Game = { handSize, players: {}, pile: pile.map(toPhrase), accusation: null, winnerId: null };
+export function createGame(playerIds: readonly string[], pile: readonly Phrase[], handSize: number = HAND_SIZE, catchphrases = true): Game {
+  const game: Game = { handSize, catchphrases, players: {}, pile: pile.map(toPhrase), accusation: null, winnerId: null };
   for (const id of playerIds) {
     const player = newPlayer(id);
     for (let i = 0; i < handSize; i++) {
@@ -217,7 +219,7 @@ export function createGame(playerIds: readonly string[], pile: readonly Phrase[]
     game.players[id] = player;
   }
   // Catchphrases come off the pile after every hand, so the hands are dealt exactly as before.
-  for (const id of playerIds) game.players[id].catchphrase = drawCatchphrase(game);
+  if (catchphrases) for (const id of playerIds) game.players[id].catchphrase = drawCatchphrase(game);
   return game;
 }
 
@@ -230,7 +232,7 @@ export function addPlayer(game: Game, playerId: string): Game {
     const card = draw(next);
     if (card) player.hand.push(card);
   }
-  player.catchphrase = drawCatchphrase(next);
+  if (next.catchphrases !== false) player.catchphrase = drawCatchphrase(next);
   next.players[playerId] = player;
   return next;
 }
@@ -322,7 +324,9 @@ export function applyAction(current: Game, action: Action): Result {
       const i = findCard(action.cardId);
       const card = isCatchphrase(action.cardId) ? catchphrase! : player.hand[i];
       if (!card) return fail('no-such-card');
-      if (!isDeclared(card)) return fail('not-declared');
+      // "Failed" works on any phrase, counting or not: people get caught before they reach the button.
+      if (accusedNow) return fail('accusation-pending');
+      if (action.catcherId === player.id) return fail('self-accuse');
       const catcher = action.catcherId ? game.players[action.catcherId] : undefined;
       if (action.catcherId && !catcher) return fail('no-such-player');
       if (card === catchphrase) {

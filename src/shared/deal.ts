@@ -63,8 +63,8 @@ export function createOfflineGame(
   settings: Partial<GameSettings> = DEFAULT_SETTINGS,
   packs: readonly Pack[] = PACKS,
 ): Game {
-  const { handSize, spice } = normalizeSettings(settings);
-  return createGame([OFFLINE_PLAYER_ID], offlinePile(code, packIds, playerNumber, spice, packs), handSize);
+  const { handSize, spice, catchphrase } = normalizeSettings(settings);
+  return createGame([OFFLINE_PLAYER_ID], offlinePile(code, packIds, playerNumber, spice, packs), handSize, catchphrase);
 }
 
 /**
@@ -77,7 +77,7 @@ export function manifestNumber(
   settings: Partial<GameSettings> = DEFAULT_SETTINGS,
   packs: readonly Pack[] = PACKS,
 ): string {
-  const { handSize, spice } = normalizeSettings(settings);
-  const key = `manifest|${code.toUpperCase()}|${deckSignature(normalizePackIds(packIds, packs), packs)}|${handSize}|${spice}`;
+  const { handSize, spice, catchphrase } = normalizeSettings(settings);
+  const key = `manifest|${code.toUpperCase()}|${deckSignature(normalizePackIds(packIds, packs), packs)}|${handSize}|${spice}${catchphrase ? '' : '|nocatchphrase'}`;
   return String(hashString(key) % 1000).padStart(3, '0');
 }
