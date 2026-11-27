@@ -12,7 +12,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { normalizeCode } from '../src/shared/prng';
 import { PROTOCOL_VERSION, type ClientMessage, type ServerMessage } from '../src/shared/protocol';
-import { handleMessage, viewFor, type Room } from '../src/shared/room';
+import { handleMessage, moveSeat, viewFor, type Room } from '../src/shared/room';
 
 import { isValidEmail, normalizeEmail } from '../src/shared/account';
 import { accountKey, AccountObject, sha256, splitCredential } from './accounts';
@@ -94,7 +94,7 @@ async function accountApi(request: Request, env: Env, path: string): Promise<Res
 }
 
 /** Rooms are deleted after this long with no activity. */
-const ROOM_TTL_MS = 6 * 60 * 60 * 1000;
+const ROOM_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 const MAX_MESSAGE_BYTES = 2048;
 
 export default {
@@ -182,7 +182,8 @@ export class RoomObject extends DurableObject<Env> {
     }
     if (!msg || typeof msg !== 'object' || typeof msg.t !== 'string') return this.send(ws, { t: 'error', code: 'bad-message' });
 
-    const room = await this.load();
+    let room = await this.load();
+    const before = room;
     let deviceId = this.deviceOf(ws);
 
     if (msg.t === 'hello') {
@@ -192,7 +193,7 @@ export class RoomObject extends DurableObject<Env> {
       }
       deviceId = msg.deviceId;
     }
-    // A signed-in player proves it with their session; the room remembers the account.
+    // Players prove who they are with their session; the room remembers the account.
     let verifiedAccount: string | null = null;
     if (msg.t === 'hello') {
       const credential = splitCredential(msg.session);
@@ -201,11 +202,30 @@ export class RoomObject extends DurableObject<Env> {
           const me = await this.env.ACCOUNTS.get(this.env.ACCOUNTS.idFromName(credential.key)).me(credential.secret);
           if (me) verifiedAccount = credential.key;
         } catch {
-          /* account service unavailable: play on as a guest */
+          // Account service unavailable: not a refusal. Drop the socket so the phone retries.
+          return ws.close(1013, 'try again');
+        }
+      }
+      // Every seat in a room belongs to a signed-in player.
+      if (!verifiedAccount) return this.send(ws, { t: 'error', code: 'sign-in-required' });
+    }
+    if (!deviceId) return this.send(ws, { t: 'error', code: 'bad-message', detail: 'hello first' });
+    const accountStub = (key: string) => this.env.ACCOUNTS.get(this.env.ACCOUNTS.idFromName(key));
+
+    // The same account on a new device picks up its seat (hand, score and name) from the old one.
+    let movedFrom: string | null = null;
+    if (msg.t === 'hello' && verifiedAccount) {
+      if (!room && !msg.create) this.ctx.waitUntil(accountStub(verifiedAccount).leftRoom(this.code).catch(() => {}));
+      if (room) {
+        const moved = moveSeat(room, verifiedAccount, deviceId);
+        if (moved.from) {
+          room = moved.room;
+          movedFrom = moved.from;
+          const seat = room.members.find((m) => m.deviceId === deviceId);
+          if (seat) msg = { ...msg, name: seat.name };
         }
       }
     }
-    if (!deviceId) return this.send(ws, { t: 'error', code: 'bad-message', detail: 'hello first' });
 
     let outcome;
     try {
@@ -233,12 +253,30 @@ export class RoomObject extends DurableObject<Env> {
       }
     }
 
+    if (movedFrom) {
+      for (const other of this.ctx.getWebSockets()) {
+        if (other !== ws && this.deviceOf(other) === movedFrom) {
+          this.send(other, { t: 'error', code: 'moved' });
+          other.serializeAttachment(null);
+          other.close(4002, 'moved');
+        }
+      }
+    }
+
     if (msg.t === 'hello' && outcome.room) {
       const member = outcome.room.members.find((m) => m.deviceId === deviceId);
       if (member) {
         if (verifiedAccount) member.account = verifiedAccount;
         else delete member.account;
       }
+      // The account remembers the room, so the game shows up on the player's other devices.
+      if (member && verifiedAccount) this.ctx.waitUntil(accountStub(verifiedAccount).joinedRoom(this.code).catch(() => {}));
+    }
+
+    // Anyone who lost their seat here (left, removed, or the room emptied) forgets the room.
+    const seated = new Set((outcome.room?.members ?? []).map((m) => m.account));
+    for (const key of new Set((before?.members ?? []).map((m) => m.account))) {
+      if (key && !seated.has(key)) this.ctx.waitUntil(accountStub(key).leftRoom(this.code).catch(() => {}));
     }
 
     // Count progress for signed-in players. Done here, on the server, so it cannot be faked.
@@ -271,6 +309,10 @@ export class RoomObject extends DurableObject<Env> {
     if (this.ctx.getWebSockets().length > 0) {
       await this.ctx.storage.setAlarm(Date.now() + ROOM_TTL_MS);
       return;
+    }
+    const room = await this.load();
+    for (const key of new Set((room?.members ?? []).map((m) => m.account))) {
+      if (key) await this.env.ACCOUNTS.get(this.env.ACCOUNTS.idFromName(key)).leftRoom(this.code).catch(() => {});
     }
     this.room = null;
     await this.ctx.storage.deleteAll();

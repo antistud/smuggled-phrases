@@ -5,8 +5,8 @@ import { account, errorText } from './account';
 import { recordProgress } from './flavor';
 import { fx } from './fx';
 import { Hand } from './hand';
-import { AccountScreen, HowTo, Home, Lobby, RulesSheet, Scoreboard, Setup, Win } from './screens';
-import { rememberCurrent, restoreSessions, type Session, type SessionState } from './session';
+import { AccountScreen, HowTo, Home, Lobby, RulesSheet, Scoreboard, Setup, useAccount, Win } from './screens';
+import { rememberCurrent, restoreSessions, SyncSession, type Session, type SessionState } from './session';
 import { load, save } from './storage';
 import { sfx } from './sfx';
 import { buzz, Toasts, useSession, type Toast } from './ui';
@@ -104,10 +104,11 @@ export function App() {
     if (fxLayer.current) fx.start(fxLayer.current);
   }, []);
   useSessions(sessions);
+  const me = useAccount();
 
   const session = sessions.find((s) => s.id === currentId) ?? null;
   /** The game on screen right now, if any. Every other game is "in the background". */
-  const visibleId = route.name === 'game' && session ? session.id : null;
+  const visibleId = route.name === 'game' && session && me ? session.id : null;
 
   // The phase each game was in when you last looked at it.
   const seen = useRef<Map<string, RoomPhase> | null>(null);
@@ -118,6 +119,16 @@ export function App() {
     .filter((s) => s.id !== visibleId)
     .map((s) => alertFor(s, seen.current!.get(s.id)))
     .filter((a): a is GameAlert => a !== null);
+
+  // Synced rooms the account is seated in that this phone is not connected to.
+  const here = new Set(sessions.filter((s) => s.state.mode === 'sync' && !s.state.fatal).map((s) => s.state.code));
+  const elsewhere = me ? account.rooms.map((r) => r.code).filter((code) => !here.has(code)) : [];
+  // Coming back to the app is when a game from another device is most likely to be wanted.
+  useEffect(() => {
+    const wake = () => document.visibilityState === 'visible' && void account.refresh();
+    document.addEventListener('visibilitychange', wake);
+    return () => document.removeEventListener('visibilitychange', wake);
+  }, []);
 
   const toast = (t: Omit<Toast, 'id'>) => {
     const id = nextId.current++;
@@ -182,6 +193,7 @@ export function App() {
     setRoute({ name: 'game' });
   };
   const adopt = (next: Session) => {
+    if (next.state.mode === 'sync') account.rememberRoom(next.state.code);
     const twin = sessions.find((s) => s !== next && !s.state.fatal && sameGame(s.state, next.state));
     if (twin) {
       // Already in that game on this phone: a second seat would only fight the first.
@@ -199,6 +211,7 @@ export function App() {
   };
   const leave = () => {
     if (!session) return;
+    if (session.state.mode === 'sync') account.forgetRoom(session.state.code);
     session.leave();
     seen.current!.delete(session.id);
     const rest = sessions.filter((s) => s !== session);
@@ -212,6 +225,9 @@ export function App() {
   let screen;
   if (route.name === 'howto') {
     screen = <HowTo onBack={() => setRoute(route.back)} />;
+  } else if (!me) {
+    // Nobody plays without signing in. The route is kept, so an invite link carries on afterwards.
+    screen = <AccountScreen onHowTo={() => setRoute({ name: 'howto', back: route })} />;
   } else if (route.name === 'account') {
     screen = <AccountScreen onBack={() => setRoute({ name: 'home' })} />;
   } else if (route.name === 'setup') {
@@ -223,6 +239,8 @@ export function App() {
       <Home
         games={sessions.map((s) => ({ id: s.id, state: s.state, flagged: alerts.some((a) => a.id === s.id) }))}
         onOpen={open}
+        elsewhere={elsewhere}
+        onBring={(code) => adopt(SyncSession.join(code, me?.name || load<string>('name') || 'Smuggler'))}
         onCreate={() => setRoute({ name: 'setup', kind: 'create' })}
         onJoin={() => setRoute({ name: 'setup', kind: 'join' })}
         onHowTo={() => setRoute({ name: 'howto', back: { name: 'home' } })}

@@ -251,6 +251,20 @@ export function handleMessage(
   }
 }
 
+/**
+ * A seat belongs to the signed-in account, not the phone. When the account turns up on a
+ * device that has no seat, its existing seat moves there. `from` is the device that lost it.
+ */
+export function moveSeat(room: Room, account: string, deviceId: string): { room: Room; from: string | null } {
+  if (memberOf(room, deviceId)) return { room, from: null };
+  const index = room.members.findIndex((m) => m.account === account);
+  if (index < 0) return { room, from: null };
+  const next = structuredCloneRoom(room);
+  const from = next.members[index].deviceId;
+  next.members[index].deviceId = deviceId;
+  return { room: next, from };
+}
+
 function structuredCloneRoom(room: Room): Room {
   return JSON.parse(JSON.stringify(room)) as Room;
 }

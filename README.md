@@ -56,20 +56,25 @@ this in the lobby. The table lives in `SPICE_LEVELS` in `src/shared/settings.ts`
 
 ## Accounts and progress
 
-Signing in is optional and has no password. A player types their email and gets a message with a
+Signing in is required to play and has no password. A player types their email and gets a message with a
 sign-in link and a 6-digit code; either one works once, for 15 minutes. (The code is there because
-on an iPhone the link opens in Safari, not in the installed app.) Signed-in players get:
+on an iPhone the link opens in Safari, not in the installed app.) Once signed in, a phone stays
+signed in, so offline games still need no connection. Every player gets:
 
 - **A record kept on the server:** phrases smuggled and seized, smugglers caught, wrong calls,
   clean getaways and games finished, with a rank that follows them to any phone.
-- **Counting done by the server.** In a synced room the room itself adds to each signed-in
+- **Counting done by the server.** In a synced room the room itself adds to each
   player's record as things happen, so it cannot be faked from a phone. Offline games are reported
   by the phone afterwards (queued until there is a connection, capped and de-duplicated), so that
   part is on the honor system like the rest of offline play.
 - **Their alias remembered** and prefilled when they join.
+- **Their synced games on every device.** The account remembers which rooms a player is seated in,
+  so signing in on another phone lists them on the home screen. Opening one there moves the seat
+  (hand, score and name) to that phone and the old one hands it over; a seat is only ever live on
+  one device. Offline games live on the phone that dealt them and do not travel.
 
-Guests still get the same record, kept on the phone only; it moves onto the account the first time
-they sign in. Anyone can change their name after joining, from the lobby or the scoreboard, and
+The app opens on the sign-in screen until the phone is signed in, and the server refuses a seat in
+a synced room without a valid sign-in. Anyone can change their name after joining, from the lobby or the scoreboard, and
 everyone is told. The rules pop up once, the first time a game is dealt on a phone.
 
 ## Two ways to play
@@ -165,7 +170,7 @@ npm run deploy      # vite build, then wrangler deploy
 
 ### Turning on email sign-in
 
-The game deploys and plays without this; only the sign-in screen needs it. Sign-in email goes
+Nobody can play until this is set up, because the app requires sign-in. Sign-in email goes
 through [Resend](https://resend.com) (free tier is plenty): add and verify your sending domain
 there, create an API key, then:
 
@@ -249,8 +254,8 @@ laid over the top and never receives input.
   when you unlock it.
 - **Offline mode** supports up to 10 players and gives each about 117 phrases from the main crate. Player numbers must
   be unique; the app cannot check that without a network.
-- **Synced rooms** hold up to 12 players and close after 6 hours without activity. Players are a
-  display name plus a random per-device id; signing in is optional. Late arrivals are dealt in.
+- **Synced rooms** hold up to 12 players and close after 2 weeks without activity. Players are a
+  display name plus a random per-device id, tied to their signed-in account. Late arrivals are dealt in.
   The host can void a stuck call or remove a player whose phone has gone away, and if the host
   leaves, the next player becomes host.
 - **Regenerating icons**: edit `public/icons/icon.svg`, then `npm run icons` (needs Playwright).

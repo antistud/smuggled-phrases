@@ -20,7 +20,10 @@ import {
   type Account,
   type AccountError,
   type PublicAccount,
+  type SavedRoom,
   type StatDelta,
+  withoutRoom,
+  withRoom,
 } from '../src/shared/account';
 import { sendLoginEmail, type MailEnv } from './mail';
 
@@ -70,6 +73,13 @@ export class AccountObject extends DurableObject<MailEnv> {
     this.account = account;
     await this.ctx.storage.put('account', account);
   }
+  private async rooms(): Promise<SavedRoom[]> {
+    return (await this.ctx.storage.get<SavedRoom[]>('rooms')) ?? [];
+  }
+  /** What the signed-in client sees: the account plus the rooms it is seated in. */
+  private async pub(account: Account): Promise<PublicAccount> {
+    return { ...publicAccount(account), rooms: await this.rooms() };
+  }
 
   /** Step one: email a link and a code. */
   async requestLogin(rawEmail: string, key: string, origin: string): Promise<LoginStarted> {
@@ -102,7 +112,7 @@ export class AccountObject extends DurableObject<MailEnv> {
     );
     await this.save(step.account);
     if (!step.ok) return { ok: false, error: step.error };
-    return { ok: true, session: `${key}.${secret}`, account: publicAccount(step.account) };
+    return { ok: true, session: `${key}.${secret}`, account: await this.pub(step.account) };
   }
 
   private async authed(secret: string): Promise<Account | null> {
@@ -112,7 +122,7 @@ export class AccountObject extends DurableObject<MailEnv> {
 
   async me(secret: string): Promise<PublicAccount | null> {
     const account = await this.authed(secret);
-    return account ? publicAccount(account) : null;
+    return account ? this.pub(account) : null;
   }
 
   async setName(secret: string, name: string): Promise<PublicAccount | null> {
@@ -120,7 +130,7 @@ export class AccountObject extends DurableObject<MailEnv> {
     if (!account) return null;
     const next = rename(account, name);
     await this.save(next);
-    return publicAccount(next);
+    return this.pub(next);
   }
 
   /** Progress the client reports itself (offline games). Capped and idempotent. */
@@ -129,7 +139,7 @@ export class AccountObject extends DurableObject<MailEnv> {
     if (!account) return null;
     const next = recordStats(account, delta, String(batchId).slice(0, 64), MAX_REPORTED_DELTA);
     if (next !== account) await this.save(next);
-    return publicAccount(next);
+    return this.pub(next);
   }
 
   async signOut(secret: string): Promise<void> {
@@ -141,5 +151,16 @@ export class AccountObject extends DurableObject<MailEnv> {
   async award(delta: StatDelta): Promise<void> {
     const account = await this.load();
     if (account?.verifiedAt) await this.save(recordStats(account, delta));
+  }
+
+  /** Called by rooms only: this account took (or came back to) a seat in a room. */
+  async joinedRoom(code: string): Promise<void> {
+    await this.ctx.storage.put('rooms', withRoom(await this.rooms(), code, Date.now()));
+  }
+
+  /** Called by rooms only: the seat is gone (left, removed, or the room closed). */
+  async leftRoom(code: string): Promise<void> {
+    const rooms = await this.rooms();
+    if (rooms.some((r) => r.code === code)) await this.ctx.storage.put('rooms', withoutRoom(rooms, code));
   }
 }

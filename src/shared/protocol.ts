@@ -93,6 +93,9 @@ export type ServerErrorCode =
   | 'wrong-phase'
   | 'removed'
   | 'outdated'
+  | 'sign-in-required'
+  /** Your seat was picked up on another of your devices. */
+  | 'moved'
   | 'rule';
 
 export type ServerMessage =

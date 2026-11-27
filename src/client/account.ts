@@ -1,9 +1,9 @@
 /**
  * The signed-in account on this phone: email sign-in, the display name and the
- * lifetime record kept on the server. Everything degrades to "guest" when
- * signed out or offline; the game never depends on it.
+ * lifetime record kept on the server. Playing requires being signed in (see the
+ * gate in app.tsx); once signed in, the phone stays so without a connection.
  */
-import { addStats, emptyStats, type PublicAccount, type StatDelta } from '../shared/account';
+import { addStats, emptyStats, type PublicAccount, type SavedRoom, type StatDelta } from '../shared/account';
 import { load, save } from './storage';
 
 interface Saved {
@@ -29,6 +29,8 @@ const ERRORS: Record<string, string> = {
 };
 
 let saved = load<Saved>('account');
+/** Rooms left on this phone just now: hidden until the server has caught up. */
+const justLeft = new Set<string>();
 const listeners = new Set<() => void>();
 
 function set(next: Saved | null): void {
@@ -73,6 +75,18 @@ export const account = {
   /** Sent to a room so the server can count this player's progress. */
   get session(): string | undefined {
     return saved?.session;
+  },
+  /** Synced rooms this account is seated in, on any device. */
+  get rooms(): SavedRoom[] {
+    return (saved?.account.rooms ?? []).filter((r) => !justLeft.has(r.code));
+  },
+  /** Leaving a room here should not have it pop straight back up as "on another device". */
+  forgetRoom(code: string): void {
+    justLeft.add(code);
+    listeners.forEach((fn) => fn());
+  },
+  rememberRoom(code: string): void {
+    justLeft.delete(code);
   },
   subscribe(fn: () => void): () => void {
     listeners.add(fn);

@@ -20,6 +20,9 @@
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["RoomObject"] },
     { "tag": "v2", "new_sqlite_classes": ["AccountObject"] }
-  ]
-  // Email sign-in: set MAIL_FROM as a var and RESEND_API_KEY as a secret (see README).
+  ],
+  // Email sign-in: RESEND_API_KEY is a secret (npx wrangler secret put RESEND_API_KEY), never in this file.
+  "vars": {
+    "MAIL_FROM": "Smuggled Phrases <noreply@send.qiiver.com>"
+  }
 }

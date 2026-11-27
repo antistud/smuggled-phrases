@@ -46,10 +46,30 @@ export interface Account {
   batches: string[];
 }
 
+/** A synced room this account holds a seat in, so the game can be found from any device. */
+export interface SavedRoom {
+  code: string;
+  /** When the account last connected to it. */
+  at: number;
+}
+export const MAX_SAVED_ROOMS = 20;
+/** A backstop only: rooms tell the account when a seat goes. Longer than a room can sit idle. */
+const SAVED_ROOM_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** Newest first, one entry per room, without anything too old to still exist. */
+export function withRoom(rooms: SavedRoom[], code: string, now: number): SavedRoom[] {
+  return [{ code, at: now }, ...withoutRoom(rooms, code)].filter((r) => now - r.at < SAVED_ROOM_TTL_MS).slice(0, MAX_SAVED_ROOMS);
+}
+export function withoutRoom(rooms: SavedRoom[], code: string): SavedRoom[] {
+  return rooms.filter((r) => r.code !== code);
+}
+
 export interface PublicAccount {
   email: string;
   name: string;
   stats: Stats;
+  /** Synced rooms this account is seated in, newest first. */
+  rooms?: SavedRoom[];
 }
 
 export type AccountError = 'bad-email' | 'too-soon' | 'too-many' | 'no-login' | 'expired' | 'wrong-code' | 'locked' | 'not-signed-in';

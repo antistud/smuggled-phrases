@@ -49,12 +49,14 @@ export function Sheet(props: { title: string; onClose?: () => void; children: Co
   );
 }
 
-export function TopBar(props: { title: string; onBack: () => void }) {
+export function TopBar(props: { title: string; onBack?: () => void }) {
   return (
     <div class="topbar">
-      <button class="iconbtn" onClick={props.onBack} aria-label="Back">
-        <Icon name="back" />
-      </button>
+      {props.onBack && (
+        <button class="iconbtn" onClick={props.onBack} aria-label="Back">
+          <Icon name="back" />
+        </button>
+      )}
       <h2>{props.title}</h2>
     </div>
   );

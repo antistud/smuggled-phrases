@@ -73,6 +73,9 @@ export function useAccount() {
 export function Home(props: {
   games: { id: string; state: SessionState; flagged: boolean }[];
   onOpen: (id: string) => void;
+  /** Synced rooms this account is seated in on another device. */
+  elsewhere: string[];
+  onBring: (code: string) => void;
   onCreate: () => void;
   onJoin: () => void;
   onHowTo: () => void;
@@ -136,7 +139,7 @@ export function Home(props: {
             Rap sheet: <b>{rankFor(sheet.smuggled)}</b> · {sheet.smuggled} smuggled · {sheet.seized} seized · {sheet.getaways} clean {sheet.getaways === 1 ? 'getaway' : 'getaways'}
           </p>
         )}
-        {props.games.length > 0 && <p class="label" style="text-align:left">{props.games.length === 1 ? 'Your game' : 'Your games'}</p>}
+        {props.games.length + props.elsewhere.length > 0 && <p class="label" style="text-align:left">{props.games.length + props.elsewhere.length === 1 ? 'Your game' : 'Your games'}</p>}
         {props.games.map((g) => (
           <button key={g.id} class="gamerow" onClick={() => props.onOpen(g.id)} aria-label={`Open game ${g.state.code}. ${gameStatus(g.state)}`}>
             <span class="stencil">{g.state.code}</span>
@@ -147,8 +150,17 @@ export function Home(props: {
             {g.flagged && <span class="flag" aria-hidden="true" />}
           </button>
         ))}
-        <button class="btn" onClick={props.onCreate}>{props.games.length > 0 ? 'Start another game' : 'Start a game'}</button>
-        <button class="btn ghost" onClick={props.onJoin}>{props.games.length > 0 ? 'Join another game' : 'Join a game'}</button>
+        {props.elsewhere.map((code) => (
+          <button key={code} class="gamerow" onClick={() => props.onBring(code)} aria-label={`Game ${code} is on another device. Bring it to this one.`}>
+            <span class="stencil">{code}</span>
+            <span>
+              On another device
+              <small>Tap to bring it here. The other device hands it over.</small>
+            </span>
+          </button>
+        ))}
+        <button class="btn" onClick={props.onCreate}>{props.games.length + props.elsewhere.length > 0 ? 'Start another game' : 'Start a game'}</button>
+        <button class="btn ghost" onClick={props.onJoin}>{props.games.length + props.elsewhere.length > 0 ? 'Join another game' : 'Join a game'}</button>
         <div class="row" style="justify-content:center;gap:14px">
           <button class="link" style="white-space:nowrap" onClick={props.onHowTo}>How to play</button>
           <button class="btn small ghost" style="white-space:nowrap;flex:none" onClick={share}>
@@ -165,7 +177,7 @@ export function Home(props: {
 
 // ---------------------------------------------------------------- account
 
-export function AccountScreen(props: { onBack: () => void }) {
+export function AccountScreen(props: { onBack?: () => void; onHowTo?: () => void }) {
   const me = useAccount();
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -238,6 +250,7 @@ export function AccountScreen(props: { onBack: () => void }) {
     <div class="screen">
       <TopBar title="Sign in" onBack={props.onBack} />
       <div class="stack" style="gap:16px">
+        {!props.onBack && <p class="marker" style="font-size:1.1rem;margin:0">Papers, please. Sign in to play.</p>}
         <p class="muted">No password. We email you a link and a 6-digit code, and your rap sheet follows you to any phone.</p>
         {!sentTo ? (
           <>
@@ -266,6 +279,7 @@ export function AccountScreen(props: { onBack: () => void }) {
           </>
         )}
         {error && <p class="note bad" role="alert">{error}</p>}
+        {props.onHowTo && <button class="link" onClick={props.onHowTo}>How to play</button>}
       </div>
     </div>
   );

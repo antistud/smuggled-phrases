@@ -240,6 +240,8 @@ const FATAL: Record<string, string> = {
   'room-full': 'That room is full.',
   removed: 'You were removed from the room.',
   outdated: 'This app is out of date. Reload to update.',
+  'sign-in-required': 'Sign in to play in this room.',
+  moved: 'You opened this game on another device. Open it from the home screen to bring it back here.',
 };
 
 const RULE_MESSAGES: Record<string, string> = {
@@ -386,6 +388,8 @@ export class SyncSession extends Session {
       this.failures = 0;
       this.create = null;
       this.data.view = msg.room;
+      // The server's name for this seat wins, so a seat picked up from another device keeps its name.
+      this.data.name = msg.room.players.find((p) => p.id === msg.room.you.id)?.name ?? this.data.name;
       this.data.offset = msg.now - Date.now();
       putGame({ id: this.id, kind: 'sync', data: this.data });
       this.update('online');
@@ -398,6 +402,12 @@ export class SyncSession extends Session {
         this.connect();
       } else if (msg.code === 'not-in-room' && this.data.view) {
         this.fail('You are no longer in this room.');
+      } else if (msg.code === 'sign-in-required') {
+        // The server does not accept this phone's sign-in. Check it (which signs the phone out if
+        // it has been revoked) and keep an existing seat: it is picked up again after signing in.
+        void account.refresh();
+        if (this.data.view) this.ws?.close();
+        else this.fail(FATAL[msg.code]);
       } else if (FATAL[msg.code]) {
         this.fail(FATAL[msg.code]);
       } else if (msg.code === 'rule') {

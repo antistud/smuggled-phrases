@@ -161,3 +161,19 @@ describe('lifetime record', () => {
     expect(JSON.stringify(publicAccount(account))).not.toContain('session-1');
   });
 });
+
+describe('rooms saved on the account', () => {
+  it('keeps one entry per room, newest first, capped and pruned', async () => {
+    const { withRoom, withoutRoom, MAX_SAVED_ROOMS } = await import('../src/shared/account');
+    const day = 24 * 60 * 60 * 1000;
+    let rooms = withRoom([], 'AAAA', 1000);
+    rooms = withRoom(rooms, 'BBBB', 2000);
+    rooms = withRoom(rooms, 'AAAA', 3000);
+    expect(rooms.map((r) => r.code)).toEqual(['AAAA', 'BBBB']);
+    expect(withoutRoom(rooms, 'AAAA').map((r) => r.code)).toEqual(['BBBB']);
+    expect(withRoom(rooms, 'CCCC', 3000 + 31 * day).map((r) => r.code)).toEqual(['CCCC']);
+    let many: ReturnType<typeof withRoom> = [];
+    for (let i = 0; i < MAX_SAVED_ROOMS + 5; i++) many = withRoom(many, `R${i}`, 5000 + i);
+    expect(many).toHaveLength(MAX_SAVED_ROOMS);
+  });
+});

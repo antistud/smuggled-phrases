@@ -231,3 +231,30 @@ describe('rooms', () => {
     expect(send(room, 'dev-b', { t: 'leave' }).room).toBeNull();
   });
 });
+
+describe('a seat follows the account', () => {
+  it('moves the seat, hand and all, to a new device of the same account', async () => {
+    const { moveSeat } = await import('../src/shared/room');
+    let room = lobby();
+    room.members[1].account = 'acct-bo';
+    room = must(room, 'dev-a', { t: 'start' });
+    const handBefore = view(room, 'dev-b').you.hand.map((c) => c.id);
+
+    const moved = moveSeat(room, 'acct-bo', 'dev-new');
+    expect(moved.from).toBe('dev-b');
+    expect(moved.room.members).toHaveLength(3);
+    expect(viewFor(moved.room, 'dev-new', new Set(['dev-new']))!.you.hand.map((c) => c.id)).toEqual(handBefore);
+    expect(viewFor(moved.room, 'dev-b', new Set())).toBeNull();
+    // The original room object is untouched.
+    expect(room.members[1].deviceId).toBe('dev-b');
+  });
+
+  it('leaves things alone for a stranger or a device that already has a seat', async () => {
+    const { moveSeat } = await import('../src/shared/room');
+    const room = lobby();
+    room.members[1].account = 'acct-bo';
+    expect(moveSeat(room, 'acct-nobody', 'dev-new')).toEqual({ room, from: null });
+    expect(moveSeat(room, 'acct-bo', 'dev-c').from).toBeNull();
+    expect(moveSeat(room, 'acct-bo', 'dev-b').from).toBeNull();
+  });
+});
