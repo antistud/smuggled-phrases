@@ -282,7 +282,7 @@ export function Chillies(props: { count: number }) {
 
 /** Hand size and spiciness, with the easy / medium / hard split drawn as a bar. */
 function SettingsPicker(props: { value: GameSettings; onChange: (s: GameSettings) => void }) {
-  const { handSize, spice } = props.value;
+  const { handSize, spice, calls } = props.value;
   const level = spiceLevel(spice);
   const set = (patch: Partial<GameSettings>) => {
     sfx.flick();
@@ -321,13 +321,27 @@ function SettingsPicker(props: { value: GameSettings; onChange: (s: GameSettings
         </div>
         <p class="marker spiceblurb">{level.blurb}</p>
       </div>
+      <div class="field">
+        <span class="label">Catching</span>
+        <button class="toggle" role="switch" aria-checked={calls} onClick={() => set({ calls: !calls })}>
+          <span class="sw" />
+          <span>
+            <strong>“Contraband!” calls {calls ? 'on' : 'off'}</strong>
+            <small>
+              {calls
+                ? 'Shout it and repeat the phrase to catch someone. Wrong calls cost a badge.'
+                : 'No shout, no badges, no penalties. Repeat their phrase to catch them; they tap Failed.'}
+            </small>
+          </span>
+        </button>
+      </div>
     </>
   );
 }
 
 function settingsSummary(s: GameSettings): string {
   const level = spiceLevel(s.spice);
-  return `${s.handSize} phrases each · ${level.name} (${level.mix.easy}/${level.mix.medium}/${level.mix.hard})`;
+  return `${s.handSize} phrases each · ${level.name} (${level.mix.easy}/${level.mix.medium}/${level.mix.hard})${s.calls ? '' : ' · calls off'}`;
 }
 
 export function Setup(props: { kind: 'create' | 'join'; code?: string; forceSync?: boolean; onBack: () => void; onSession: (s: Session) => void }) {
@@ -546,7 +560,7 @@ export function Scoreboard(props: { session: Session; state: SessionState; onClo
             <tr>
               <th>Smuggler</th>
               <th>Left</th>
-              <th>Badges</th>
+              {state.settings.calls && <th>Badges</th>}
               <th>Cleared</th>
             </tr>
           </thead>
@@ -570,7 +584,7 @@ export function Scoreboard(props: { session: Session; state: SessionState; onClo
                   </span>
                 </td>
                 <td>{p.cards}</td>
-                <td><Badges left={p.badges} /></td>
+                {state.settings.calls && <td><Badges left={p.badges} /></td>}
                 <td>{p.smuggled}</td>
               </tr>
             ))}
@@ -637,15 +651,28 @@ export function Win(props: { session: Session; state: SessionState; onLeave: () 
 
 // ------------------------------------------------------------ how to play
 
-export function RuleList() {
+/** The rules, written for the game being played: hand size and whether "Contraband!" calls are on. */
+export function RuleList(props: { settings?: GameSettings }) {
+  const settings = props.settings ?? DEFAULT_SETTINGS;
+  const fixed = !!props.settings;
   return (
     <ol class="rules">
-      <li class="paper">You start with <b>5 secret phrases</b> (the host can pick 3 to 8, and how spicy they are). Keep your phone to yourself.</li>
-      <li class="paper">Work a phrase into the conversation <b>out loud</b>, then tap <b>I said it</b> on that card. A private 30-second countdown starts.</li>
-      <li class="paper">If nobody calls it in 30 seconds, shout <b>“Smuggled!”</b>, show the card, and clear it from your hand.</li>
-      <li class="paper">Think someone just smuggled? Shout <b>“Contraband!”</b> within the 30 seconds <b>and repeat the phrase</b>. Pointing at a person is not enough.</li>
-      <li class="paper">Caught: the phrase is <b>seized</b> and replaced with a new one. The catcher may swap one of their own phrases.</li>
-      <li class="paper">Wrong call: the caller <b>draws an extra phrase</b> and loses one of their <b>3 inspector badges</b>. No badges, no calling. Bluffing with odd sentences to drain badges is fair play.</li>
+      <li class="paper">
+        You start with <b>{settings.handSize} secret phrases</b>
+        {fixed ? '' : ' (the host can pick 3 to 8, and how spicy they are)'}. Keep your phone to yourself.
+      </li>
+      <li class="paper">Work a phrase into the conversation <b>out loud</b>, then tap <b>Said it</b> on that card. A private 30-second countdown starts.</li>
+      <li class="paper">If nobody catches it in 30 seconds, shout <b>“Smuggled!”</b>, show the card, and stamp it out of your hand.</li>
+      {settings.calls ? (
+        <>
+          <li class="paper">Think someone just smuggled? Shout <b>“Contraband!”</b> within the 30 seconds <b>and repeat the phrase</b>. Pointing at a person is not enough.</li>
+          <li class="paper">Caught: tap <b>Failed</b> on the card. The phrase is <b>seized</b> and replaced with a new one, and the catcher earns a <b>bounty coin</b>.</li>
+          <li class="paper">Wrong call: the caller <b>draws an extra phrase</b> and loses one of their <b>3 inspector badges</b>. No badges, no calling. Bluffing with odd sentences to drain badges is fair play.</li>
+        </>
+      ) : (
+        <li class="paper">Think someone just smuggled? <b>Repeat the phrase</b> back to them within the 30 seconds. If you are right they tap <b>Failed</b>: the phrase is <b>seized</b> and replaced, and you earn a <b>bounty coin</b>. There is no penalty for guessing wrong.</li>
+      )}
+      <li class="paper">Each <b>bounty coin</b> swaps one of your phrases for a fresh one, whenever you like. They pile up until you spend them.</li>
       <li class="paper">First player with an <b>empty hand</b> wins.</li>
       <li class="paper">Phrases must be spoken aloud. A close paraphrase of a long phrase counts.</li>
     </ol>
@@ -653,11 +680,11 @@ export function RuleList() {
 }
 
 /** Shown once, the first time a game starts on this phone. */
-export function RulesSheet(props: { onClose: () => void }) {
+export function RulesSheet(props: { settings: GameSettings; onClose: () => void }) {
   return (
     <Sheet title="Before you smuggle">
       <p class="marker" style="font-size:1.05rem">Thirty seconds of rules. Then act natural.</p>
-      <RuleList />
+      <RuleList settings={props.settings} />
       <div class="stick">
         <button class="btn amber" onClick={props.onClose}>Got it, deal me in</button>
       </div>
@@ -665,12 +692,13 @@ export function RulesSheet(props: { onClose: () => void }) {
   );
 }
 
-export function HowTo(props: { onBack: () => void }) {
+export function HowTo(props: { settings?: GameSettings; onBack: () => void }) {
   return (
     <div class="screen">
       <TopBar title="How to play" onBack={props.onBack} />
       <p class="tagline" style="margin:0 0 14px">Talk normal. Smuggle nonsense. Don’t get searched.</p>
-      <RuleList />
+      <RuleList settings={props.settings} />
+      {!props.settings && <p class="muted" style="margin:14px 0 0;font-size:.9rem">The host can switch “Contraband!” calls off. Then there is no shout, no badges and no wrong-call penalty: you catch someone just by repeating their phrase.</p>}
       <p class="muted" style="margin:14px 0;font-size:.9rem">
         Your timers keep running if the phone locks. In a synced room the app tracks the scoreboard and settles calls; offline, it is all on your honor.
       </p>

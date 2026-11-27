@@ -214,7 +214,10 @@ export function handleMessage(
       return play({ type: 'undeclare', playerId: me.id, cardId: msg.cardId });
     case 'smuggle':
       return play({ type: 'smuggle', playerId: me.id, cardId: msg.cardId, now });
+    case 'caught':
+      return play({ type: 'caught', playerId: me.id, cardId: msg.cardId, catcherId: msg.catcherId || undefined });
     case 'accuse':
+      if (!room.settings.calls) return fail('rule', 'calls-off');
       return play({ type: 'accuse', playerId: me.id, accusedId: msg.accusedId, now });
     case 'resolve':
       return play({ type: 'resolve', playerId: me.id, cardId: msg.cardId, now });

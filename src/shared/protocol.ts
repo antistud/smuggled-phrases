@@ -3,7 +3,7 @@ import type { Phrase } from './packs';
 import type { Accusation, Card } from './rules';
 import type { GameSettings } from './settings';
 
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 export const MAX_ROOM_PLAYERS = 12;
 export const MAX_NAME_LENGTH = 16;
 
@@ -23,6 +23,8 @@ export type ClientMessage =
   | { t: 'declare'; cardId: string }
   | { t: 'undeclare'; cardId: string }
   | { t: 'smuggle'; cardId: string }
+  /** "Failed": I was caught on this card. Naming the catcher pays them a bounty coin. */
+  | { t: 'caught'; cardId: string; catcherId?: string | null }
   | { t: 'accuse'; accusedId: string }
   | { t: 'resolve'; cardId: string | null }
   | { t: 'cancelAccusation' }

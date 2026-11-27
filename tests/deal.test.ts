@@ -172,7 +172,10 @@ describe('spiciness mix', () => {
 
   it('normalises settings from anywhere', () => {
     expect(normalizeSettings(undefined)).toEqual(DEFAULT_SETTINGS);
-    expect(normalizeSettings({ handSize: 2.6, spice: 9 })).toEqual({ handSize: MIN_HAND_SIZE, spice: 5 });
+    expect(normalizeSettings({ handSize: 2.6, spice: 9 })).toEqual({ handSize: MIN_HAND_SIZE, spice: 5, calls: true });
+    expect(normalizeSettings({ calls: false }).calls).toBe(false);
+    expect(normalizeSettings({ calls: 'no' as unknown as boolean }).calls).toBe(true);
+    expect(manifestNumber('LAMA', ['core'], { calls: false })).not.toBe(manifestNumber('LAMA', ['core'], { calls: true }));
     expect(normalizeSettings({ handSize: Number.NaN, spice: 'hot' as unknown as number })).toEqual(DEFAULT_SETTINGS);
     expect(normalizeSettings({ handSize: 50 }).handSize).toBe(MAX_HAND_SIZE);
   });

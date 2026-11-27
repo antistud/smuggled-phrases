@@ -94,6 +94,12 @@ export const sfx = {
     tone(1047, 0.6, 0.6, 'triangle', 0.14);
     noise(0.55, 0.3, 0.1, 6000);
   },
+  /** A bounty coin landing in your pocket. */
+  coin() {
+    tone(988, 0, 0.09, 'square', 0.07);
+    tone(1319, 0.08, 0.35, 'square', 0.07);
+    tone(2637, 0.08, 0.3, 'sine', 0.05);
+  },
   tick() {
     tone(900, 0, 0.04, 'square', 0.04);
   },

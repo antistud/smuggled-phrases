@@ -11,7 +11,7 @@ import { load, save } from './storage';
 import { sfx } from './sfx';
 import { buzz, Toasts, useSession, type Toast } from './ui';
 
-type Route = { name: 'home' } | { name: 'setup'; kind: 'create' | 'join'; code?: string; forceSync?: boolean } | { name: 'howto'; back: Route } | { name: 'game' } | { name: 'account' };
+type Route = { name: 'home' } | { name: 'setup'; kind: 'create' | 'join'; code?: string; forceSync?: boolean } | { name: 'howto'; back: Route; inGame?: boolean } | { name: 'game' } | { name: 'account' };
 
 /** ?room=CODE from an invite link or QR code. */
 function invitedRoom(): string {
@@ -25,7 +25,7 @@ function describe(a: Announcement): Omit<Toast, 'id'> {
     case 'smuggled':
       return { stamp: { text: 'Cleared', green: true }, body: <>{a.name} smuggled <em>“{a.text}”</em></> };
     case 'seized':
-      return { stamp: { text: 'Seized' }, body: <>{a.by ?? 'Someone'} caught {a.name}: <em>“{a.text}”</em></> };
+      return { stamp: { text: 'Seized' }, body: a.by ? <>{a.by} caught {a.name}: <em>“{a.text}”</em></> : <>{a.name} got caught: <em>“{a.text}”</em></> };
     case 'wrongCall':
       return { body: <>Wrong call! {a.name} loses a badge ({a.badgesLeft} left) and draws a phrase.</> };
     case 'cancelled':
@@ -105,13 +105,13 @@ export function App() {
 
   let screen;
   if (route.name === 'howto') {
-    screen = <HowTo onBack={() => setRoute(route.back)} />;
+    screen = <HowTo settings={route.inGame && session ? session.state.settings : undefined} onBack={() => setRoute(route.back)} />;
   } else if (route.name === 'account') {
     screen = <AccountScreen onBack={() => setRoute({ name: 'home' })} />;
   } else if (route.name === 'setup') {
     screen = <Setup kind={route.kind} code={route.code} forceSync={route.forceSync} onBack={() => setRoute({ name: 'home' })} onSession={adopt} />;
   } else if (route.name === 'game' && session) {
-    screen = <Game session={session} onLeave={leave} onHome={() => setRoute({ name: 'home' })} onHowTo={() => setRoute({ name: 'howto', back: { name: 'game' } })} onOver={() => setToasts([])} />;
+    screen = <Game session={session} onLeave={leave} onHome={() => setRoute({ name: 'home' })} onHowTo={() => setRoute({ name: 'howto', back: { name: 'game' }, inGame: true })} onOver={() => setToasts([])} />;
   } else {
     screen = (
       <Home
@@ -184,7 +184,7 @@ function Game(props: { session: Session; onLeave: () => void; onHome: () => void
   return (
     <>
       <Hand session={session} state={state} onScores={() => setScores(true)} />
-      {rules && <RulesSheet onClose={closeRules} />}
+      {rules && <RulesSheet settings={state.settings} onClose={closeRules} />}
       {scores && <Scoreboard session={session} state={state} onClose={() => setScores(false)} onHowTo={props.onHowTo} onLeave={props.onLeave} />}
     </>
   );

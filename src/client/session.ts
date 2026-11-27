@@ -86,7 +86,8 @@ export abstract class Session {
   dispose(): void {}
 
   // Offline (honor system) only.
-  caught(_cardId: string): void {}
+  /** "Failed": own up to being caught. In a room, naming the catcher pays them a coin. */
+  caught(_cardId: string, _catcherId?: string | null): void {}
   caughtSomeone(): void {}
   wrongCall(): void {}
   // Synced only.
@@ -209,6 +210,7 @@ const RULE_MESSAGES: Record<string, string> = {
   'timer-expired': 'Too late: that phrase had already cleared.',
   'pile-empty': 'The crate is empty: no phrases left to draw.',
   'need-players': 'You need at least two smugglers.',
+  'calls-off': 'Contraband! calls are switched off for this game.',
 };
 
 function apiBase(): string {
@@ -433,6 +435,7 @@ export class SyncSession extends Session {
   undeclare(cardId: string) { this.send({ t: 'undeclare', cardId }); }
   smuggle(cardId: string) { this.send({ t: 'smuggle', cardId }); }
   swap(cardId: string | null) { this.send({ t: 'swap', cardId }); }
+  caught(cardId: string, catcherId?: string | null) { this.send({ t: 'caught', cardId, catcherId: catcherId ?? null }); }
   accuse(playerId: string) { this.send({ t: 'accuse', accusedId: playerId }); }
   resolve(cardId: string | null) { this.send({ t: 'resolve', cardId }); }
   cancelAccusation() { this.send({ t: 'cancelAccusation' }); }

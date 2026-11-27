@@ -216,6 +216,15 @@ h1, h2, h3, p { margin: 0; }
 .note { font-size: 0.9rem; color: var(--paper); background: rgba(0, 0, 0, 0.4); border-left: 4px solid var(--lamp); padding: 8px 10px; border-radius: 3px; }
 .note.bad { border-color: var(--red); }
 
+/* on/off setting */
+.toggle { display: flex; align-items: center; gap: 12px; text-align: left; width: 100%; min-height: 60px; padding: 10px 12px; border-radius: 6px; background: rgba(0, 0, 0, 0.45); box-shadow: inset 0 0 0 2px rgba(228, 213, 177, 0.25); }
+.toggle small { display: block; color: var(--mist); }
+.toggle .sw { flex: none; width: 54px; height: 30px; border-radius: 15px; background: #3a3a34; box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.5); position: relative; transition: background 0.2s; }
+.toggle .sw::after { content: ''; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: var(--paper); box-shadow: 0 2px 0 rgba(0, 0, 0, 0.5); transition: transform 0.2s cubic-bezier(0.3, 1.5, 0.5, 1); }
+.toggle[aria-checked='true'] { box-shadow: inset 0 0 0 2px var(--red); }
+.toggle[aria-checked='true'] .sw { background: var(--red); }
+.toggle[aria-checked='true'] .sw::after { transform: translateX(24px); }
+
 /* spiciness */
 .numgrid.six { grid-template-columns: repeat(6, 1fr); }
 .spice { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
@@ -305,6 +314,34 @@ h1, h2, h3, p { margin: 0; }
 .card.done .paper-head { background: var(--green); color: #f1fff6; border-bottom: 0; }
 @keyframes nudge { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-4deg) scale(1.05); } 75% { transform: rotate(4deg) scale(1.05); } }
 .card.done .act { background: linear-gradient(180deg, #3f9a5d, #1f5a34); box-shadow: 0 4px 0 #0c2916; animation: nudge 0.9s ease-in-out infinite; }
+/* Two choices on every card: it went fine, or it did not. */
+.card .acts { display: flex; flex-direction: column; gap: 6px; margin: 8px 8px 8px 0; width: 92px; }
+.card .acts .act { margin: 0; width: 100%; min-height: 54px; }
+.card .act small { display: block; font-family: var(--ui); font-size: 0.56rem; letter-spacing: 0.1em; font-weight: 700; opacity: 0.7; margin-top: 2px; }
+.card .fail { min-height: 40px; border-radius: 6px; font-family: var(--stencil); font-weight: 700; font-size: 0.9rem; letter-spacing: 0.06em; text-transform: uppercase; color: #fff1e6; background: linear-gradient(180deg, #d8452e, var(--red-dark)); box-shadow: 0 3px 0 #57130b; transition: transform 0.07s, box-shadow 0.07s; }
+.card .fail:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 #57130b; }
+.card .fail:disabled { opacity: 0.4; }
+
+/* Bounty coins */
+.coin { display: inline-block; width: 28px; height: 28px; border-radius: 50%; flex: none;
+  background: radial-gradient(circle at 35% 30%, #fff3bf, #f2b63c 45%, #a8741a 100%); box-shadow: inset 0 0 0 2px #8a5c0c, inset 0 0 0 4px rgba(255, 240, 180, 0.45), 0 2px 0 rgba(0, 0, 0, 0.6); position: relative; }
+.coin::after { content: '★'; position: absolute; inset: 0; display: grid; place-items: center; color: #7a5208; font-size: 0.85rem; line-height: 1; }
+.coin.big { width: 96px; height: 96px; box-shadow: inset 0 0 0 5px #8a5c0c, inset 0 0 0 10px rgba(255, 240, 180, 0.45), 0 0 40px rgba(242, 182, 60, 0.8); }
+.coin.big::after { font-size: 3rem; }
+.coins { display: flex; align-items: center; gap: 6px; min-height: 48px; padding: 4px 10px 4px 6px; border-radius: 24px; text-align: left; background: rgba(0, 0, 0, 0.4); box-shadow: inset 0 0 0 1px rgba(228, 213, 177, 0.2); margin-right: 6px; }
+.coins b { font-family: var(--stencil); font-size: 1.4rem; line-height: 1; }
+.coins:disabled { opacity: 0.45; }
+.coins:disabled .coin { filter: grayscale(1) brightness(0.7); }
+@keyframes coinpop { 0% { transform: scale(1); } 35% { transform: scale(1.35); box-shadow: 0 0 26px rgba(242, 182, 60, 0.9); } 100% { transform: scale(1); } }
+.coins.has { box-shadow: inset 0 0 0 2px var(--lamp), 0 0 14px rgba(242, 182, 60, 0.35); animation: coinpop 0.5s 1s both; }
+.coinflip { position: absolute; inset: 0; z-index: 43; pointer-events: none; display: grid; place-items: center; perspective: 600px; }
+@keyframes cointoss { 0% { transform: translateY(60vh) scale(0.5); opacity: 0; } 12% { opacity: 1; } 45% { transform: translateY(-9vh) scale(1.15); } 70% { transform: translateY(0) scale(1); } 100% { transform: translate(18vw, -44vh) scale(0.22); opacity: 0.2; } }
+@keyframes coinspin { to { transform: rotateY(2160deg); } }
+.coinflip .spin { grid-area: 1 / 1; animation: cointoss 1.15s cubic-bezier(0.3, 0.6, 0.4, 1) both; }
+.coinflip .spin .coin { animation: coinspin 1.15s linear both; display: block; }
+@keyframes plusone { 0%, 30% { opacity: 0; transform: translateY(70px) scale(0.6); } 50% { opacity: 1; transform: translateY(84px) scale(1.1); } 80% { opacity: 1; transform: translateY(84px) scale(1); } 100% { opacity: 0; transform: translateY(60px); } }
+.coinflip .plus { grid-area: 1 / 1; font-size: 1.8rem; color: var(--lamp); text-shadow: 0 3px 0 #000, 0 0 22px rgba(242, 182, 60, 0.7); animation: plusone 1.15s both; }
+
 /* The countdown is a burning fuse. */
 .card .bar { grid-column: 1 / -1; height: 8px; background: rgba(29, 26, 22, 0.25); position: relative; }
 .card .bar i { display: block; height: 100%; width: 100%; transform-origin: left; background: repeating-linear-gradient(90deg, #5b4326 0 6px, #3d2a18 6px 12px); }
@@ -350,12 +387,19 @@ h1, h2, h3, p { margin: 0; }
 .dock .btn { min-height: 66px; min-width: 0; font-size: 1.300rem; padding: 10px 6px; letter-spacing: 0.04em; }
 @keyframes beacon { 50% { box-shadow: 0 5px 0 #57130b, 0 0 30px rgba(255, 70, 40, 0.65); } }
 .dock .btn.red:not(:disabled) { animation: beacon 2.400s ease-in-out infinite; }
+/* The Contraband! call: red lettering on paper, the reverse of every other alarm on screen. */
+.btn.call { color: var(--red); text-shadow: none;
+  background: linear-gradient(var(--red), var(--red)) top / 100% 6px no-repeat, linear-gradient(var(--red), var(--red)) bottom / 100% 6px no-repeat, repeating-linear-gradient(2deg, rgba(0, 0, 0, 0.05) 0 2px, transparent 2px 9px), linear-gradient(180deg, #f3e8cb, #d9c69a);
+  box-shadow: 0 5px 0 #57130b, 0 9px 14px rgba(0, 0, 0, 0.5), inset 0 0 0 3px var(--red); }
+.btn.call:active:not(:disabled) { box-shadow: 0 1px 0 #57130b, inset 0 0 0 3px var(--red); }
+@keyframes callglow { 50% { box-shadow: 0 5px 0 #57130b, 0 0 26px rgba(255, 90, 50, 0.6), inset 0 0 0 3px var(--red); } }
+.dock .btn.call:not(:disabled) { animation: callglow 2.400s ease-in-out infinite; }
 
 /* Full-screen CONTRABAND! slam when a call goes up. */
 .splash { position: absolute; inset: 0; z-index: 44; display: grid; place-items: center; pointer-events: none; background: radial-gradient(circle, rgba(194, 51, 31, 0.35), rgba(0, 0, 0, 0.7)); animation: splashout 1.500s both; }
 @keyframes splashout { 0% { opacity: 0; } 8% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
-.splash span { font-family: var(--stencil); font-weight: 700; text-transform: uppercase; font-size: clamp(2.600rem, 14vw, 4rem); color: #fff1e6; padding: 6px 18px; border: 8px double #fff1e6; background: var(--red); transform: rotate(-8deg); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7); animation: slam 0.45s cubic-bezier(0.3, 0, 0.2, 1) both; text-align: center; line-height: 1; }
-.splash span small { display: block; font-family: var(--marker); font-size: 1rem; letter-spacing: 0; text-transform: none; margin-top: 6px; }
+.splash span { font-family: var(--stencil); font-weight: 700; text-transform: uppercase; font-size: clamp(2.600rem, 14vw, 4rem); color: var(--red); padding: 6px 18px; border: 8px double var(--red); background: #f3e8cb; transform: rotate(-8deg); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7); animation: slam 0.45s cubic-bezier(0.3, 0, 0.2, 1) both; text-align: center; line-height: 1; }
+.splash span small { color: var(--ink); display: block; font-family: var(--marker); font-size: 1rem; letter-spacing: 0; text-transform: none; margin-top: 6px; }
 @keyframes slam { 0% { transform: rotate(-8deg) scale(4); opacity: 0; } 60% { transform: rotate(-8deg) scale(0.92); opacity: 1; } 80% { transform: rotate(-8deg) scale(1.05); } 100% { transform: rotate(-8deg) scale(1); } }
 
 /* ---------- sheets, toasts ---------- */

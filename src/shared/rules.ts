@@ -26,7 +26,7 @@ export interface Player {
   smuggled: Phrase[];
   /** Phrases this player had seized. */
   seized: Phrase[];
-  /** Swaps earned by catching someone and not yet used. */
+  /** Bounty coins: earned by catching someone, each buys one phrase swap whenever the player likes. */
   swapCredits: number;
 }
 
@@ -54,7 +54,11 @@ export type Action =
   | { type: 'undeclare'; playerId: string; cardId: string }
   /** Rule 3: countdown survived, clear the card. */
   | { type: 'smuggle'; playerId: string; cardId: string; now: number }
-  /** Rule 5, honor system: this player's counting card was caught. Optional catcher earns a swap. */
+  /**
+   * Rule 5, owned up to by the player ("Failed"): this card was caught. It need
+   * not be counting: people get caught before they reach the button. The
+   * optional catcher earns a bounty coin (a swap credit).
+   */
   | { type: 'caught'; playerId: string; cardId: string; catcherId?: string }
   /** Rule 5, honor system: this player caught someone and may swap. */
   | { type: 'grantSwap'; playerId: string }
@@ -271,7 +275,8 @@ export function applyAction(current: Game, action: Action): Result {
     case 'caught': {
       const i = findCard(action.cardId);
       if (i < 0) return fail('no-such-card');
-      if (!isDeclared(player.hand[i])) return fail('not-declared');
+      if (accusedNow) return fail('accusation-pending');
+      if (action.catcherId === player.id) return fail('self-accuse');
       const catcher = action.catcherId ? game.players[action.catcherId] : undefined;
       if (action.catcherId && !catcher) return fail('no-such-player');
       const phrase = seize(game, player, i);

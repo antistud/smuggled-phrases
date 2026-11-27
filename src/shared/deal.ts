@@ -77,7 +77,7 @@ export function manifestNumber(
   settings: Partial<GameSettings> = DEFAULT_SETTINGS,
   packs: readonly Pack[] = PACKS,
 ): string {
-  const { handSize, spice } = normalizeSettings(settings);
-  const key = `manifest|${code.toUpperCase()}|${deckSignature(normalizePackIds(packIds, packs), packs)}|${handSize}|${spice}`;
+  const { handSize, spice, calls } = normalizeSettings(settings);
+  const key = `manifest|${code.toUpperCase()}|${deckSignature(normalizePackIds(packIds, packs), packs)}|${handSize}|${spice}${calls ? '' : '|quiet'}`;
   return String(hashString(key) % 1000).padStart(3, '0');
 }

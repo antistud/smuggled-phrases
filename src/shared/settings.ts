@@ -10,11 +10,17 @@ export interface GameSettings {
   handSize: number;
   /** 1 (mild) to 5 (inferno). */
   spice: number;
+  /**
+   * Whether the "Contraband!" call is in play: the shout, the inspector badges
+   * and the wrong-call penalty. Off, players are still caught by anyone who
+   * repeats their phrase in time, and own up with the Failed button.
+   */
+  calls: boolean;
 }
 
 export const MIN_HAND_SIZE = 3;
 export const MAX_HAND_SIZE = 8;
-export const DEFAULT_SETTINGS: GameSettings = { handSize: 5, spice: 2 };
+export const DEFAULT_SETTINGS: GameSettings = { handSize: 5, spice: 2, calls: true };
 
 export interface SpiceLevel {
   level: number;
@@ -45,6 +51,7 @@ export function normalizeSettings(raw: Partial<GameSettings> | null | undefined)
   return {
     handSize: int(raw?.handSize, DEFAULT_SETTINGS.handSize, MIN_HAND_SIZE, MAX_HAND_SIZE),
     spice: int(raw?.spice, DEFAULT_SETTINGS.spice, 1, SPICE_LEVELS.length),
+    calls: typeof raw?.calls === 'boolean' ? raw.calls : DEFAULT_SETTINGS.calls,
   };
 }
 
