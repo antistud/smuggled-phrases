@@ -250,6 +250,14 @@ export function AccountScreen(props: { onBack?: () => void; onHowTo?: () => void
     <div class="screen">
       <TopBar title="Sign in" onBack={props.onBack} />
       <div class="stack" style="gap:16px">
+        {props.onHowTo && (
+          <>
+            <p style="margin:0">A party game of sneaking silly phrases into normal conversation without getting caught.</p>
+            <button class="btn ghost" onClick={props.onHowTo}>
+              <Icon name="list" /> How to play
+            </button>
+          </>
+        )}
         {!props.onBack && <p class="marker" style="font-size:1.1rem;margin:0">Papers, please. Sign in to play.</p>}
         <p class="muted">No password. We email you a link and a 6-digit code, and your rap sheet follows you to any phone.</p>
         {!sentTo ? (
@@ -279,7 +287,6 @@ export function AccountScreen(props: { onBack?: () => void; onHowTo?: () => void
           </>
         )}
         {error && <p class="note bad" role="alert">{error}</p>}
-        {props.onHowTo && <button class="link" onClick={props.onHowTo}>How to play</button>}
       </div>
     </div>
   );
