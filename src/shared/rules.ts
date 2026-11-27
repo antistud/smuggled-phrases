@@ -26,8 +26,16 @@ export interface Player {
   smuggled: Phrase[];
   /** Phrases this player had seized. */
   seized: Phrase[];
-  /** Bounty coins: earned by catching someone, each buys one phrase swap whenever the player likes. */
+  /** Swaps earned by catching someone and not yet used. */
   swapCredits: number;
+  /**
+   * A phrase that never leaves: it can be said again and again, caught or not.
+   * It is not part of the hand, so it never stands between a player and a win.
+   * Optional because games dealt before catchphrases existed do not have one.
+   */
+  catchphrase?: Card | null;
+  /** How many times the catchphrase got through its 30 seconds uncaught. */
+  catchCount?: number;
 }
 
 /** A "Contraband!" call waiting for the accused to confirm or deny (synced rooms). */
@@ -40,6 +48,8 @@ export interface Accusation {
 export interface Game {
   /** Phrases each player starts with (also used to deal in late joiners). */
   handSize: number;
+  /** Whether players are dealt a catchphrase. Absent on games from before this was a setting (treated as on). */
+  catchphrases?: boolean;
   players: Record<string, Player>;
   /** Draw pile; index 0 is the next card. */
   pile: Phrase[];
@@ -54,11 +64,7 @@ export type Action =
   | { type: 'undeclare'; playerId: string; cardId: string }
   /** Rule 3: countdown survived, clear the card. */
   | { type: 'smuggle'; playerId: string; cardId: string; now: number }
-  /**
-   * Rule 5, owned up to by the player ("Failed"): this card was caught. It need
-   * not be counting: people get caught before they reach the button. The
-   * optional catcher earns a bounty coin (a swap credit).
-   */
+  /** Rule 5, honor system: this player's counting card was caught. Optional catcher earns a swap. */
   | { type: 'caught'; playerId: string; cardId: string; catcherId?: string }
   /** Rule 5, honor system: this player caught someone and may swap. */
   | { type: 'grantSwap'; playerId: string }
@@ -77,6 +83,10 @@ export type GameEvent =
   | { type: 'declared'; playerId: string }
   | { type: 'smuggled'; playerId: string; phrase: Phrase }
   | { type: 'seized'; playerId: string; catcherId: string | null; phrase: Phrase }
+  /** The catchphrase survived its countdown; `count` is the new running total. */
+  | { type: 'catchphrase'; playerId: string; phrase: Phrase; count: number }
+  /** The catchphrase was caught. It stays put, ready to be tried again. */
+  | { type: 'catchphraseCaught'; playerId: string; catcherId: string | null; phrase: Phrase }
   | { type: 'wrongCall'; playerId: string; accusedId: string | null; badgesLeft: number }
   | { type: 'swapped'; playerId: string }
   | { type: 'accused'; playerId: string; accusedId: string }
@@ -131,7 +141,12 @@ export function canCall(player: Player): boolean {
 }
 
 function newPlayer(id: string): Player {
-  return { id, hand: [], badges: STARTING_BADGES, smuggled: [], seized: [], swapCredits: 0 };
+  return { id, hand: [], badges: STARTING_BADGES, smuggled: [], seized: [], swapCredits: 0, catchphrase: null, catchCount: 0 };
+}
+
+/** Every card a player could have a countdown on: the hand plus the catchphrase. */
+function cardsOf(player: Player): Card[] {
+  return player.catchphrase ? [player.catchphrase, ...player.hand] : player.hand;
 }
 
 function clone(game: Game): Game {
@@ -145,6 +160,21 @@ function toPhrase(p: Phrase): Phrase {
 function draw(game: Game): Card | null {
   const next = game.pile.shift();
   return next ? { ...toPhrase(next), saidAt: null } : null;
+}
+
+/**
+ * A catchphrase has to be easy to say again and again, so it is the first easy
+ * phrase left in the pile (failing that, the mildest one there is).
+ */
+function drawCatchphrase(game: Game): Card | null {
+  let at = -1;
+  for (let i = 0; i < game.pile.length; i++) {
+    if (at < 0 || game.pile[i].heat < game.pile[at].heat) at = i;
+    if (game.pile[at].heat === 1) break;
+  }
+  if (at < 0) return null;
+  const [next] = game.pile.splice(at, 1);
+  return { ...toPhrase(next), saidAt: null };
 }
 
 function checkWin(game: Game, playerId: string, events: GameEvent[]): void {
@@ -178,8 +208,8 @@ function penalise(game: Game, caller: Player): void {
  * Hands are dealt as whole blocks (not one card at a time around the table) so
  * each one keeps the difficulty blend the pile was mixed with.
  */
-export function createGame(playerIds: readonly string[], pile: readonly Phrase[], handSize: number = HAND_SIZE): Game {
-  const game: Game = { handSize, players: {}, pile: pile.map(toPhrase), accusation: null, winnerId: null };
+export function createGame(playerIds: readonly string[], pile: readonly Phrase[], handSize: number = HAND_SIZE, catchphrases = true): Game {
+  const game: Game = { handSize, catchphrases, players: {}, pile: pile.map(toPhrase), accusation: null, winnerId: null };
   for (const id of playerIds) {
     const player = newPlayer(id);
     for (let i = 0; i < handSize; i++) {
@@ -188,6 +218,8 @@ export function createGame(playerIds: readonly string[], pile: readonly Phrase[]
     }
     game.players[id] = player;
   }
+  // Catchphrases come off the pile after every hand, so the hands are dealt exactly as before.
+  if (catchphrases) for (const id of playerIds) game.players[id].catchphrase = drawCatchphrase(game);
   return game;
 }
 
@@ -200,6 +232,7 @@ export function addPlayer(game: Game, playerId: string): Game {
     const card = draw(next);
     if (card) player.hand.push(card);
   }
+  if (next.catchphrases !== false) player.catchphrase = drawCatchphrase(next);
   next.players[playerId] = player;
   return next;
 }
@@ -234,36 +267,51 @@ export function applyAction(current: Game, action: Action): Result {
   const player = game.players[action.playerId];
   if (!player) return fail('no-such-player');
   const findCard = (cardId: string) => player.hand.findIndex((c) => c.id === cardId);
+  const catchphrase = player.catchphrase ?? null;
+  const isCatchphrase = (cardId: string) => catchphrase !== null && catchphrase.id === cardId;
+  /** Being caught on the catchphrase costs nothing: it resets and the catcher earns their swap. */
+  const catchphraseCaught = (catcher: Player | undefined): void => {
+    catchphrase!.saidAt = null;
+    if (catcher) catcher.swapCredits += 1;
+    events.push({ type: 'catchphraseCaught', playerId: player.id, catcherId: catcher?.id ?? null, phrase: toPhrase(catchphrase!) });
+  };
   const accusedNow = game.accusation?.accusedId === player.id;
 
   switch (action.type) {
     case 'declare': {
-      const i = findCard(action.cardId);
-      if (i < 0) return fail('no-such-card');
+      const card = isCatchphrase(action.cardId) ? catchphrase! : player.hand[findCard(action.cardId)];
+      if (!card) return fail('no-such-card');
       if (accusedNow) return fail('accusation-pending');
-      if (isDeclared(player.hand[i])) return fail('already-declared');
-      player.hand[i].saidAt = action.now;
+      if (isDeclared(card)) return fail('already-declared');
+      card.saidAt = action.now;
       events.push({ type: 'declared', playerId: player.id });
       return done();
     }
 
     case 'undeclare': {
-      const i = findCard(action.cardId);
-      if (i < 0) return fail('no-such-card');
+      const card = isCatchphrase(action.cardId) ? catchphrase! : player.hand[findCard(action.cardId)];
+      if (!card) return fail('no-such-card');
       if (accusedNow) return fail('accusation-pending');
-      if (!isDeclared(player.hand[i])) return fail('not-declared');
-      player.hand[i].saidAt = null;
+      if (!isDeclared(card)) return fail('not-declared');
+      card.saidAt = null;
       return done();
     }
 
     case 'smuggle': {
       const i = findCard(action.cardId);
-      if (i < 0) return fail('no-such-card');
-      const card = player.hand[i];
+      const card = isCatchphrase(action.cardId) ? catchphrase! : player.hand[i];
+      if (!card) return fail('no-such-card');
       if (!isDeclared(card)) return fail('not-declared');
       // While a call against this player is pending their clocks are stopped.
       if (accusedNow && !isCleared(card, game.accusation!.at)) return fail('accusation-pending');
       if (!isCleared(card, action.now)) return fail('timer-running');
+      if (card === catchphrase) {
+        // Chalk one up and put it straight back, ready to go again.
+        card.saidAt = null;
+        player.catchCount = (player.catchCount ?? 0) + 1;
+        events.push({ type: 'catchphrase', playerId: player.id, phrase: toPhrase(card), count: player.catchCount });
+        return done();
+      }
       player.hand.splice(i, 1);
       const phrase = toPhrase(card);
       player.smuggled.push(phrase);
@@ -274,11 +322,17 @@ export function applyAction(current: Game, action: Action): Result {
 
     case 'caught': {
       const i = findCard(action.cardId);
-      if (i < 0) return fail('no-such-card');
+      const card = isCatchphrase(action.cardId) ? catchphrase! : player.hand[i];
+      if (!card) return fail('no-such-card');
+      // "Failed" works on any phrase, counting or not: people get caught before they reach the button.
       if (accusedNow) return fail('accusation-pending');
       if (action.catcherId === player.id) return fail('self-accuse');
       const catcher = action.catcherId ? game.players[action.catcherId] : undefined;
       if (action.catcherId && !catcher) return fail('no-such-player');
+      if (card === catchphrase) {
+        catchphraseCaught(catcher);
+        return done();
+      }
       const phrase = seize(game, player, i);
       if (catcher) catcher.swapCredits += 1;
       events.push({ type: 'seized', playerId: player.id, catcherId: catcher?.id ?? null, phrase });
@@ -334,14 +388,18 @@ export function applyAction(current: Game, action: Action): Result {
 
       if (action.cardId !== null) {
         const i = findCard(action.cardId);
-        if (i < 0) return fail('no-such-card');
-        const card = player.hand[i];
-        if (!isDeclared(card)) return fail('not-declared');
-        // The call only counts if it landed inside the 30 seconds.
-        if (!isLive(card, accusation.at)) return fail('timer-expired');
-        const phrase = seize(game, player, i);
-        if (caller) caller.swapCredits += 1;
-        events.push({ type: 'seized', playerId: player.id, catcherId: caller?.id ?? null, phrase });
+        const card = isCatchphrase(action.cardId) ? catchphrase! : player.hand[i];
+        if (!card) return fail('no-such-card');
+        // A phrase can be caught before its owner got round to tapping "I said it".
+        // Once declared, though, the call only counts if it landed inside the 30 seconds.
+        if (isDeclared(card) && !isLive(card, accusation.at)) return fail('timer-expired');
+        if (card === catchphrase) {
+          catchphraseCaught(caller);
+        } else {
+          const phrase = seize(game, player, i);
+          if (caller) caller.swapCredits += 1;
+          events.push({ type: 'seized', playerId: player.id, catcherId: caller?.id ?? null, phrase });
+        }
       } else if (caller) {
         penalise(game, caller);
         events.push({ type: 'wrongCall', playerId: caller.id, accusedId: player.id, badgesLeft: caller.badges });
@@ -363,7 +421,7 @@ function resumeTimers(game: Game, accusation: Accusation, now: number): void {
   const accused = game.players[accusation.accusedId];
   if (!accused) return;
   const paused = Math.max(0, now - accusation.at);
-  for (const card of accused.hand) {
+  for (const card of cardsOf(accused)) {
     if (isLive(card, accusation.at)) card.saidAt = card.saidAt! + paused;
   }
 }

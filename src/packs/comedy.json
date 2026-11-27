@@ -1,0 +1,61 @@
+{
+  "id": "comedy",
+  "name": "Pure Comedy",
+  "icon": "😂",
+  "description": "Everyday embarrassment, played for laughs.",
+  "rating": "family",
+  "version": 1,
+  "phrases": {
+    "easy": [
+      "inside-out trousers day",
+      "a sneeze in a quiet lift",
+      "dad's victory dance",
+      "the reply-all incident",
+      "a dramatic slow clap",
+      "my other left",
+      "the autocorrect apology",
+      "a suspicious silence",
+      "the family group chat",
+      "one enormous burp",
+      "a pocket full of crumbs",
+      "the awkward wave",
+      "trousers of regret",
+      "an accidental high five",
+      "the forbidden snack drawer",
+      "a very confident wrong answer",
+      "the mystery smell",
+      "bedhead of the year",
+      "a pigeon with a grudge",
+      "the push door I pulled"
+    ],
+    "medium": [
+      "I waved back at someone waving behind me.",
+      "My stomach growled during the moment of silence.",
+      "I said 'you too' to the waiter.",
+      "The dog looked at me like I'd let him down.",
+      "I tripped over nothing and blamed the floor.",
+      "My phone autocorrected it to 'ducks'.",
+      "I laughed so hard a pea came out of my nose.",
+      "We don't talk about the karaoke.",
+      "I held the door for someone much too far away.",
+      "That's not a hat, that's a lampshade.",
+      "I walked into the glass door twice.",
+      "The toddler called my bluff.",
+      "I've been pronouncing it wrong my whole life.",
+      "My chair made that noise, not me.",
+      "I replied to everyone by mistake."
+    ],
+    "hard": [
+      "I waved at a stranger for a full minute before realising it was a coat.",
+      "My dad tells the same joke every year and laughs before he gets to the end.",
+      "I went to say 'good morning' and 'hello' and it came out as 'gorlo'.",
+      "The whole lift went silent, and that's when my shoe decided to squeak.",
+      "I practised the speech in the mirror, and even the mirror looked bored.",
+      "Somebody asked me a simple question and I answered with my phone number.",
+      "I clapped when the plane landed and I was the only one on board who did.",
+      "My brother laughed so hard at his own joke that he had to go and lie down.",
+      "I told the hairdresser it looked great and then wore a hat for a month.",
+      "The toddler pointed at me in the shop and said, 'That one looks tired.'"
+    ]
+  }
+}

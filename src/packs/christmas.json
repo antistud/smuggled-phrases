@@ -1,0 +1,61 @@
+{
+  "id": "christmas",
+  "name": "Christmas",
+  "icon": "🎄",
+  "description": "Tangled lights and suspicious socks.",
+  "rating": "family",
+  "version": 1,
+  "phrases": {
+    "easy": [
+      "the tangled fairy lights",
+      "a partridge with opinions",
+      "emergency wrapping paper",
+      "the wonky tree topper",
+      "reindeer parking only",
+      "a stocking full of batteries",
+      "the ugly sweater contest",
+      "one broken candy cane",
+      "gingerbread structural damage",
+      "the last mince pie",
+      "a suspiciously sock-shaped gift",
+      "tinsel in the soup",
+      "the elf on the fridge",
+      "sleigh bell practice",
+      "an advent calendar with no doors left",
+      "the neighbour's inflatable snowman",
+      "fruitcake from 2019",
+      "the chimney measurements",
+      "a carol in the wrong key",
+      "batteries not included"
+    ],
+    "medium": [
+      "Santa left boot prints on the good rug.",
+      "The tree is leaning towards the television.",
+      "Somebody ate the carrot we left for Rudolph.",
+      "I wrapped it so well I forgot what it is.",
+      "The cat has claimed the nativity scene.",
+      "We need more tape and fewer opinions.",
+      "That's the third pair of socks this morning.",
+      "The gingerbread man was missing a leg already.",
+      "I heard hooves on the roof, or possibly Dad.",
+      "Who keeps moving the elf?",
+      "The lights only work if you hold the plug.",
+      "I'm on the naughty list for a technicality.",
+      "The snowman is wearing my good scarf.",
+      "We sang it twice because nobody knew verse three.",
+      "The star goes on top, not the dog."
+    ],
+    "hard": [
+      "Every December we untangle the same lights and learn absolutely nothing.",
+      "I assembled the toy at midnight and there were six screws left over.",
+      "The reindeer on the lawn fell over, so now it looks like they're napping.",
+      "My grandmother knits one enormous sweater and we take turns wearing it.",
+      "We left out milk and cookies, and in the morning there was a thank-you note.",
+      "The tree dropped so many needles that we vacuumed up a second, smaller tree.",
+      "Somebody regifted me the candle I gave them last year, and I respect it.",
+      "I hid the presents so carefully that we found one in the middle of July.",
+      "The carollers would not leave until we joined in on the chorus.",
+      "It isn't Christmas until someone falls asleep wearing a paper crown."
+    ]
+  }
+}

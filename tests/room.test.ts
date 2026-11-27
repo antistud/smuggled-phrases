@@ -16,7 +16,7 @@ function must(room: Room | null, deviceId: string, msg: ClientMessage, now = T0)
   return out.room!;
 }
 const hello = (deviceId: string, name: string, create = false): ClientMessage =>
-  ({ t: 'hello', v: 4, deviceId, name, ...(create ? { create: { packs: ['core'] } } : {}) });
+  ({ t: 'hello', v: 3, deviceId, name, ...(create ? { create: { packs: ['core'] } } : {}) });
 
 function lobby(): Room {
   let room = must(null, 'dev-a', hello('dev-a', 'Ada', true));
@@ -58,17 +58,17 @@ describe('rooms', () => {
   });
 
   it('lets the host set phrase count and spiciness, clamped to sane values', () => {
-    let room = must(null, 'dev-a', { t: 'hello', v: 4, deviceId: 'dev-a', name: 'Ada', create: { packs: ['core'], handSize: 7, spice: 4 } });
-    expect(room.settings).toEqual({ handSize: 7, spice: 4, calls: true });
+    let room = must(null, 'dev-a', { t: 'hello', v: 3, deviceId: 'dev-a', name: 'Ada', create: { packs: ['core'], handSize: 7, spice: 4 } });
+    expect(room.settings).toEqual({ handSize: 7, spice: 4, catchphrase: true });
     room = must(room, 'dev-b', hello('dev-b', 'Bo'));
     expect(send(room, 'dev-b', { t: 'configure', options: { packs: ['core'], handSize: 3 } }).error?.code).toBe('not-host');
     room = must(room, 'dev-a', { t: 'configure', options: { packs: ['core', 'travel', 'bogus'], handSize: 99, spice: 0 } });
-    expect(room.settings).toEqual({ handSize: 8, spice: 1, calls: true });
+    expect(room.settings).toEqual({ handSize: 8, spice: 1, catchphrase: true });
     expect(room.packs).toEqual(['core', 'travel']);
     room = must(room, 'dev-a', { t: 'configure', options: { packs: ['core'], handSize: 4, spice: 5 } });
     room = must(room, 'dev-a', { t: 'start' });
     expect(view(room, 'dev-b').you.hand).toHaveLength(4);
-    expect(view(room, 'dev-b').settings).toEqual({ handSize: 4, spice: 5, calls: true });
+    expect(view(room, 'dev-b').settings).toEqual({ handSize: 4, spice: 5, catchphrase: true });
     expect(send(room, 'dev-a', { t: 'configure', options: { packs: ['core'], spice: 1 } }).error?.code).toBe('wrong-phase');
     // Inferno: the dealt hands lean hard but are still a mix overall.
     const heats = Object.values(room.game!.players).flatMap((p) => p.hand.map((c) => c.heat));
@@ -76,14 +76,27 @@ describe('rooms', () => {
     expect(new Set([...heats, ...room.game!.pile.slice(0, 20).map((p) => p.heat)]).size).toBe(3);
   });
 
-  it('with calls switched off: no Contraband!, but Failed still seizes and pays a coin', () => {
-    let room = must(null, 'dev-a', { t: 'hello', v: 4, deviceId: 'dev-a', name: 'Ada', create: { packs: ['core'], calls: false } });
-    expect(room.settings.calls).toBe(false);
+  it('catchphrases can be switched off for a room', () => {
+    let room = must(null, 'dev-a', { t: 'hello', v: 3, deviceId: 'dev-a', name: 'Ada', create: { packs: ['core'], catchphrase: false } });
+    expect(room.settings.catchphrase).toBe(false);
     room = must(room, 'dev-b', hello('dev-b', 'Bo'));
     room = must(room, 'dev-a', { t: 'start' });
-    expect(send(room, 'dev-b', { t: 'accuse', accusedId: 'p1' }).error).toEqual({ code: 'rule', detail: 'calls-off' });
+    expect(view(room, 'dev-a').you.catchphrase).toBeNull();
+    expect(view(room, 'dev-a').you.hand).toHaveLength(HAND_SIZE);
+    // Late joiners do not get one either.
+    room = must(room, 'dev-c', hello('dev-c', 'Cy'));
+    expect(room.game!.players.p3.catchphrase ?? null).toBeNull();
 
+    // On by default.
+    let on = must(lobby(), 'dev-a', { t: 'start' });
+    expect(view(on, 'dev-a').you.catchphrase?.heat).toBe(1);
+    expect(send(on, 'dev-a', { t: 'configure', options: { packs: ['core'], catchphrase: false } }).error?.code).toBe('wrong-phase');
+  });
+
+  it('"Failed" works on a phrase that was never started, names the catcher and pays a coin', () => {
+    let room = must(lobby(), 'dev-a', { t: 'start' });
     const card = view(room, 'dev-a').you.hand[2];
+    expect(card.saidAt).toBeNull();
     const out = send(room, 'dev-a', { t: 'caught', cardId: card.id, catcherId: 'p2' });
     expect(out.news).toEqual([{ kind: 'seized', name: 'Ada', by: 'Bo', text: card.text }]);
     expect(out.awards).toEqual([
@@ -94,10 +107,12 @@ describe('rooms', () => {
     expect(view(room, 'dev-a').you.hand).toHaveLength(HAND_SIZE);
     expect(view(room, 'dev-b').you.swapCredits).toBe(1);
     // Nobody named: seized all the same, no coin for anyone.
-    const again = send(room, 'dev-a', { t: 'caught', cardId: view(room, 'dev-a').you.hand[0].id, catcherId: null });
+    const again = send(room, 'dev-a', { t: 'caught', cardId: view(room, 'dev-a').you.hand[0].id });
     expect(again.news[0]).toMatchObject({ kind: 'seized', by: null });
     expect(view(again.room!, 'dev-b').you.swapCredits).toBe(1);
-    expect(send(room, 'dev-a', { t: 'caught', cardId: view(room, 'dev-a').you.hand[0].id, catcherId: 'p1' }).error?.detail).toBe('self-accuse');
+    // Naming yourself earns nothing.
+    const self = send(room, 'dev-a', { t: 'caught', cardId: view(room, 'dev-a').you.hand[0].id, catcherId: 'p1' });
+    expect(view(self.room!, 'dev-a').you.swapCredits).toBe(0);
   });
 
   it('lets a player change their name at any time, keeping names unique', () => {
@@ -159,6 +174,24 @@ describe('rooms', () => {
     expect(aText).not.toContain('dev-b');
     expect(viewFor(room, 'stranger', new Set())).toBeNull();
     expect(viewFor(room, 'dev-a', new Set(['dev-a']))!.players.map((p) => p.connected)).toEqual([true, false, false]);
+  });
+
+  it('lets a player own up to being caught, crediting whoever caught them', () => {
+    let room = must(lobby(), 'dev-a', { t: 'start' });
+    const [card, other] = view(room, 'dev-a').you.hand;
+    room = must(room, 'dev-a', { t: 'declare', cardId: card.id });
+    const out = send(room, 'dev-a', { t: 'caught', cardId: card.id, catcherId: 'p2' }, T0 + 4000);
+    expect(out.news).toEqual([{ kind: 'seized', name: 'Ada', by: 'Bo', text: card.text }]);
+    room = out.room!;
+    expect(view(room, 'dev-a').you.hand).toHaveLength(HAND_SIZE);
+    expect(view(room, 'dev-a').you.hand.some((c) => c.id === card.id)).toBe(false);
+    expect(view(room, 'dev-a').you.seized).toBe(1);
+    expect(view(room, 'dev-b').you.swapCredits).toBe(1);
+    // You cannot name yourself to pocket the swap.
+    room = must(room, 'dev-a', { t: 'declare', cardId: other.id }, T0 + 5000);
+    room = must(room, 'dev-a', { t: 'caught', cardId: other.id, catcherId: 'p1' }, T0 + 6000);
+    expect(view(room, 'dev-a').you.swapCredits).toBe(0);
+    expect(view(room, 'dev-a').you.seized).toBe(2);
   });
 
   it('runs a full bust: accuse, confirm, swap', () => {

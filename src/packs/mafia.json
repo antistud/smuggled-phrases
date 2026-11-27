@@ -1,0 +1,61 @@
+{
+  "id": "mafia",
+  "name": "Mafia",
+  "icon": "🎩",
+  "description": "Friends of the family. Purely legitimate business.",
+  "rating": "family",
+  "version": 1,
+  "phrases": {
+    "easy": [
+      "the family business",
+      "an offer you can't refuse",
+      "a guy who knows a guy",
+      "the cannoli",
+      "concrete galoshes",
+      "a violin case",
+      "the back room",
+      "cousin Sal's van",
+      "a friendly reminder",
+      "the usual table",
+      "a pinstripe suit",
+      "the meatball situation",
+      "my associate",
+      "protection money",
+      "a fedora with history",
+      "the waterfront",
+      "nonna's sauce",
+      "a sit-down",
+      "the fish market",
+      "badda bing"
+    ],
+    "medium": [
+      "It'd be a shame if something happened to it.",
+      "He sleeps with the goldfish.",
+      "Nobody talks to the don before lunch.",
+      "I'm just here to deliver a message.",
+      "You come to me on the day of my nap?",
+      "The boss wants to see you about the lasagna.",
+      "We consider him a friend of the family.",
+      "Forget about it, it's taken care of.",
+      "I know a guy who can make that disappear.",
+      "That's a nice bakery you've got here.",
+      "Tell him the pigeon has landed.",
+      "We had a little talk behind the deli.",
+      "I didn't see nothing and neither did you.",
+      "He owes my uncle a favour and a ladder.",
+      "The envelope is under the cannoli."
+    ],
+    "hard": [
+      "My uncle runs a perfectly legitimate olive oil business, and that's all I know.",
+      "Tell your friend the family is very disappointed about the garden gnome.",
+      "We're going to make him a sandwich he can't refuse.",
+      "Somebody talked, and now the whole neighbourhood knows the sauce recipe.",
+      "I'd hate for your nice bicycle to end up at the bottom of the duck pond.",
+      "The boss says you're either with the bowling team or you're against it.",
+      "He went for a long drive in the country and came back with a lot of cheese.",
+      "You tell Big Tony the meatballs were short and he knows what that means.",
+      "Nobody leaves this table until we find out who touched the last breadstick.",
+      "In this family we settle things the old way, with a very tense game of cards."
+    ]
+  }
+}

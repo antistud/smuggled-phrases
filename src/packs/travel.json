@@ -1,6 +1,7 @@
 {
   "id": "travel",
   "name": "Lost Luggage",
+  "icon": "🧳",
   "description": "A bonus crate of holiday and travel oddities.",
   "rating": "family",
   "version": 2,

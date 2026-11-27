@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { normalizeCode } from '../shared/prng';
-import type { Announcement } from '../shared/protocol';
+import type { Announcement, RoomPhase } from '../shared/protocol';
 import { account, errorText } from './account';
 import { recordProgress } from './flavor';
 import { fx } from './fx';
 import { Hand } from './hand';
 import { AccountScreen, HowTo, Home, Lobby, RulesSheet, Scoreboard, Setup, Win } from './screens';
-import { restoreSession, type Session } from './session';
+import { rememberCurrent, restoreSessions, type Session, type SessionState } from './session';
 import { load, save } from './storage';
 import { sfx } from './sfx';
 import { buzz, Toasts, useSession, type Toast } from './ui';
@@ -25,7 +25,11 @@ function describe(a: Announcement): Omit<Toast, 'id'> {
     case 'smuggled':
       return { stamp: { text: 'Cleared', green: true }, body: <>{a.name} smuggled <em>“{a.text}”</em></> };
     case 'seized':
-      return { stamp: { text: 'Seized' }, body: a.by ? <>{a.by} caught {a.name}: <em>“{a.text}”</em></> : <>{a.name} got caught: <em>“{a.text}”</em></> };
+      return { stamp: { text: 'Seized' }, body: <>{a.by ?? 'Someone'} caught {a.name}: <em>“{a.text}”</em></> };
+    case 'catchphrase':
+      return { stamp: { text: `×${a.count}`, green: true }, body: <>{a.name} got their catchphrase through again: <em>“{a.text}”</em></> };
+    case 'catchphraseCaught':
+      return { stamp: { text: 'Caught' }, body: <>{a.by ?? 'Someone'} caught {a.name}’s catchphrase: <em>“{a.text}”</em></> };
     case 'wrongCall':
       return { body: <>Wrong call! {a.name} loses a badge ({a.badgesLeft} left) and draws a phrase.</> };
     case 'cancelled':
@@ -39,19 +43,81 @@ function describe(a: Announcement): Omit<Toast, 'id'> {
   }
 }
 
+/** Something in a game you are not looking at that you would want to know about. */
+interface GameAlert {
+  id: string;
+  code: string;
+  text: string;
+  urgent: boolean;
+  /** Changes when the alert is about a new event, so it can be announced once. */
+  key: string;
+}
+
+function alertFor(session: Session, lastSeenPhase: RoomPhase | undefined): GameAlert | null {
+  const st: SessionState = session.state;
+  const base = { id: session.id, code: st.code };
+  if (st.fatal) return { ...base, text: st.fatal, urgent: false, key: 'fatal' };
+  const call = st.accusation;
+  if (call && call.accusedId === st.you.id) {
+    const caller = st.players.find((p) => p.id === call.callerId)?.name ?? 'Someone';
+    return { ...base, text: `${caller} is searching you!`, urgent: true, key: `call@${call.at}` };
+  }
+  if (lastSeenPhase && lastSeenPhase !== st.phase) {
+    const text = st.phase === 'playing' ? 'The game has started.' : st.phase === 'over' ? `${st.winner?.name ?? 'Someone'} got away clean. Game over.` : 'Back in the hideout.';
+    return { ...base, text, urgent: false, key: st.phase };
+  }
+  return null;
+}
+
+/** Re-render whenever any of the games changes. */
+function useSessions(sessions: Session[]): void {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const offs = sessions.map((s) => s.subscribe(() => tick((n) => n + 1)));
+    return () => offs.forEach((off) => off());
+  }, [sessions]);
+}
+
+function sameGame(a: SessionState, b: SessionState): boolean {
+  if (a.mode !== b.mode || a.code !== b.code) return false;
+  return a.mode === 'sync' || (a.playerNumber === b.playerNumber && a.manifest === b.manifest);
+}
+
 export function App() {
-  const [session, setSession] = useState<Session | null>(() => restoreSession());
-  const [route, setRoute] = useState<Route>(() => {
+  const [boot] = useState(() => {
+    const restored = restoreSessions();
+    // Games that were already over when the app opened have had their fanfare and been counted.
+    for (const s of restored.sessions) if (s.state.phase === 'over') celebrated.add(s);
     const code = invitedRoom();
-    if (code && session?.state.code !== code) return { name: 'setup', kind: 'join', code, forceSync: true };
-    return session ? { name: 'game' } : { name: 'home' };
+    const invited = code ? restored.sessions.find((s) => s.state.mode === 'sync' && s.state.code === code) : undefined;
+    const currentId = invited?.id ?? restored.currentId;
+    const route: Route = code && !invited ? { name: 'setup', kind: 'join', code, forceSync: true } : currentId ? { name: 'game' } : { name: 'home' };
+    return { sessions: restored.sessions, currentId, route };
   });
+  const [sessions, setSessions] = useState<Session[]>(boot.sessions);
+  const [currentId, setCurrentId] = useState<string | null>(boot.currentId);
+  const [route, setRoute] = useState<Route>(boot.route);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(1);
   const fxLayer = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (fxLayer.current) fx.start(fxLayer.current);
   }, []);
+  useSessions(sessions);
+
+  const session = sessions.find((s) => s.id === currentId) ?? null;
+  /** The game on screen right now, if any. Every other game is "in the background". */
+  const visibleId = route.name === 'game' && session ? session.id : null;
+
+  // The phase each game was in when you last looked at it.
+  const seen = useRef<Map<string, RoomPhase> | null>(null);
+  if (!seen.current) seen.current = new Map(boot.sessions.map((s) => [s.id, s.state.phase]));
+  if (session && visibleId) seen.current.set(session.id, session.state.phase);
+
+  const alerts = sessions
+    .filter((s) => s.id !== visibleId)
+    .map((s) => alertFor(s, seen.current!.get(s.id)))
+    .filter((a): a is GameAlert => a !== null);
 
   const toast = (t: Omit<Toast, 'id'>) => {
     const id = nextId.current++;
@@ -78,30 +144,70 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!session) return;
-    const offNews = session.onNews((a) => {
-      toast(describe(a));
-      if (a.kind === 'wrongCall') sfx.buzzer();
-      if (a.kind === 'seized' || a.kind === 'smuggled') sfx.thud();
-      if (a.kind === 'joined') sfx.flick();
+    const offs = sessions.flatMap((s) => {
+      const visible = s.id === visibleId;
+      return [
+        s.onNews((a) => {
+          const t = describe(a);
+          if (!visible) {
+            // Quietly, and say which room it came from.
+            toast({ ...t, body: <><b>{s.state.code}</b> · {t.body}</> });
+            return;
+          }
+          toast(t);
+          if (a.kind === 'wrongCall') sfx.buzzer();
+          if (a.kind === 'seized' || a.kind === 'smuggled' || a.kind === 'catchphrase' || a.kind === 'catchphraseCaught') sfx.thud();
+          if (a.kind === 'joined') sfx.flick();
+        }),
+        s.onError((message) => {
+          if (visible) toast({ body: message });
+        }),
+      ];
     });
-    const offError = session.onError((message) => toast({ body: message }));
-    return () => {
-      offNews();
-      offError();
-    };
-  }, [session]);
+    return () => offs.forEach((off) => off());
+  }, [sessions, visibleId]);
 
-  const adopt = (next: Session) => {
-    if (session && session !== next) session.leave();
-    setSession(next);
+  // Being searched in a game you are not looking at gets the siren.
+  const urgentKey = alerts.filter((a) => a.urgent).map((a) => `${a.id}:${a.key}`).join(',');
+  useEffect(() => {
+    if (!urgentKey) return;
+    sfx.siren();
+    buzz([120, 60, 120, 60, 240]);
+  }, [urgentKey]);
+
+  const open = (id: string) => {
+    setCurrentId(id);
+    rememberCurrent(id);
+    setToasts([]);
     setRoute({ name: 'game' });
   };
+  const adopt = (next: Session) => {
+    const twin = sessions.find((s) => s !== next && !s.state.fatal && sameGame(s.state, next.state));
+    if (twin) {
+      // Already in that game on this phone: a second seat would only fight the first.
+      if (next.state.mode === 'sync') next.dispose();
+      else next.leave();
+      open(twin.id);
+      toast({ body: <>You are already in {twin.state.code}. Here it is.</> });
+      return;
+    }
+    // A dead entry for the same room is replaced by the fresh one.
+    const stale = sessions.filter((s) => s.state.fatal && s.state.mode === next.state.mode && s.state.code === next.state.code);
+    stale.forEach((s) => s.leave());
+    setSessions((list) => [...list.filter((s) => !stale.includes(s)), next]);
+    open(next.id);
+  };
   const leave = () => {
-    session?.leave();
-    setSession(null);
+    if (!session) return;
+    session.leave();
+    seen.current!.delete(session.id);
+    const rest = sessions.filter((s) => s !== session);
+    setSessions(rest);
+    setCurrentId(null);
+    rememberCurrent(rest[0]?.id ?? null);
     setRoute({ name: 'home' });
   };
+  const home = () => setRoute({ name: 'home' });
 
   let screen;
   if (route.name === 'howto') {
@@ -109,14 +215,14 @@ export function App() {
   } else if (route.name === 'account') {
     screen = <AccountScreen onBack={() => setRoute({ name: 'home' })} />;
   } else if (route.name === 'setup') {
-    screen = <Setup kind={route.kind} code={route.code} forceSync={route.forceSync} onBack={() => setRoute({ name: 'home' })} onSession={adopt} />;
+    screen = <Setup kind={route.kind} code={route.code} forceSync={route.forceSync} onBack={home} onSession={adopt} />;
   } else if (route.name === 'game' && session) {
-    screen = <Game session={session} onLeave={leave} onHome={() => setRoute({ name: 'home' })} onHowTo={() => setRoute({ name: 'howto', back: { name: 'game' }, inGame: true })} onOver={() => setToasts([])} />;
+    screen = <Game key={session.id} session={session} onLeave={leave} onHome={home} onHowTo={() => setRoute({ name: 'howto', back: { name: 'game' }, inGame: true })} onOver={() => setToasts([])} />;
   } else {
     screen = (
       <Home
-        resume={session && !session.state.fatal ? session.state : null}
-        onResume={() => setRoute({ name: 'game' })}
+        games={sessions.map((s) => ({ id: s.id, state: s.state, flagged: alerts.some((a) => a.id === s.id) }))}
+        onOpen={open}
         onCreate={() => setRoute({ name: 'setup', kind: 'create' })}
         onJoin={() => setRoute({ name: 'setup', kind: 'join' })}
         onHowTo={() => setRoute({ name: 'howto', back: { name: 'home' } })}
@@ -128,13 +234,30 @@ export function App() {
   return (
     <>
       <div class="world">
-        {screen}
+        {alerts.length > 0 && (
+          <div class="alerts" role="status">
+            {alerts.map((a) => (
+              <button key={a.id} class={`alert ${a.urgent ? 'urgent' : ''}`} onClick={() => open(a.id)}>
+                <span class="stencil">{a.code}</span>
+                <span>{a.text}</span>
+                <span class="go">Open</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {/* The alert bar already clears the notch, so the screen below must not pad for it again. */}
+        <div class="stage" style={alerts.length > 0 ? '--safe-t:0px' : undefined}>
+          {screen}
+        </div>
         <Toasts items={toasts} />
       </div>
       <div class="fx" ref={fxLayer} aria-hidden="true" />
     </>
   );
 }
+
+/** Games whose win has already had its fanfare, so switching back does not replay it. */
+const celebrated = new WeakSet<Session>();
 
 function Game(props: { session: Session; onLeave: () => void; onHome: () => void; onHowTo: () => void; onOver: () => void }) {
   const { session } = props;
@@ -151,21 +274,23 @@ function Game(props: { session: Session; onLeave: () => void; onHome: () => void
     setRules(false);
   };
 
-  // Celebrate, and count the result, only when the game ends while we are watching
-  // (not again every time a finished game is reopened).
-  const lastPhase = useRef(state.phase);
+  // Celebrate, and count the result, once per game: not again when you switch back to it.
+  const won = state.phase === 'over';
   useEffect(() => {
-    const ended = state.phase === 'over' && lastPhase.current === 'playing';
-    lastPhase.current = state.phase;
-    if (!ended) return;
+    if (!won) {
+      celebrated.delete(session);
+      return;
+    }
+    // The win screen says it all; don't bury it under announcements.
+    props.onOver();
+    if (celebrated.has(session)) return;
+    celebrated.add(session);
     buzz([100, 60, 100, 60, 500]);
     fx.cash();
     sfx.fanfare();
-    // The win screen says it all; don't bury it under announcements.
-    props.onOver();
     recordProgress(state.mode, { games: 1, getaways: state.winner?.id === state.you.id ? 1 : 0 });
     if (state.mode === 'sync') setTimeout(() => void account.refresh(), 1500);
-  }, [state.phase]);
+  }, [won]);
   useEffect(() => {
     if (state.phase !== 'playing') setScores(false);
   }, [state.phase]);
@@ -179,13 +304,13 @@ function Game(props: { session: Session; onLeave: () => void; onHome: () => void
       </div>
     );
   }
-  if (state.phase === 'over' && state.winner) return <Win session={session} state={state} onLeave={props.onLeave} />;
-  if (state.phase === 'lobby') return <Lobby session={session} state={state} onLeave={props.onLeave} />;
+  if (state.phase === 'over' && state.winner) return <Win session={session} state={state} onLeave={props.onLeave} onHome={props.onHome} />;
+  if (state.phase === 'lobby') return <Lobby session={session} state={state} onLeave={props.onLeave} onHome={props.onHome} />;
   return (
     <>
       <Hand session={session} state={state} onScores={() => setScores(true)} />
       {rules && <RulesSheet settings={state.settings} onClose={closeRules} />}
-      {scores && <Scoreboard session={session} state={state} onClose={() => setScores(false)} onHowTo={props.onHowTo} onLeave={props.onLeave} />}
+      {scores && <Scoreboard session={session} state={state} onClose={() => setScores(false)} onHowTo={props.onHowTo} onLeave={props.onLeave} onHome={props.onHome} />}
     </>
   );
 }

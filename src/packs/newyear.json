@@ -1,0 +1,61 @@
+{
+  "id": "newyear",
+  "name": "New Year's",
+  "icon": "🎆",
+  "description": "Countdowns, confetti and doomed resolutions.",
+  "rating": "family",
+  "version": 1,
+  "phrases": {
+    "easy": [
+      "the countdown clock",
+      "a slightly flat party horn",
+      "resolution number four",
+      "the midnight snack table",
+      "confetti in my shoe",
+      "last year's calendar",
+      "a sparkler in the rain",
+      "the unused gym bag",
+      "sparkling apple juice",
+      "the big shiny ball",
+      "a brand new planner",
+      "glitter everywhere",
+      "the first yawn of the year",
+      "leftover party hats",
+      "a toast to the toaster",
+      "the stroke of midnight",
+      "pots and pans parade",
+      "one very long hug line",
+      "twelve lucky grapes",
+      "the fresh start drawer"
+    ],
+    "medium": [
+      "I fell asleep at eleven fifty-eight.",
+      "My resolution is to finish last year's resolution.",
+      "We counted down in the wrong time zone.",
+      "The fireworks scared the neighbour's goose.",
+      "I've been writing the wrong year since March.",
+      "This is the year I learn to juggle.",
+      "Somebody popped the confetti indoors again.",
+      "I'm giving up giving things up.",
+      "The calendar still says December in the kitchen.",
+      "We toasted with whatever was in the fridge.",
+      "New year, same wobbly table.",
+      "I only stayed up for the snacks.",
+      "The party horn went off in my pocket.",
+      "My gym membership and I are on a break.",
+      "Nobody knows the second verse of that song."
+    ],
+    "hard": [
+      "I made a list of resolutions and then resolved to find where I put the list.",
+      "We banged pots on the porch at midnight and three streets banged back.",
+      "By the second week of January my new planner had become a coaster.",
+      "Every year I promise to drink more water and the plants get it instead.",
+      "The countdown started early at our house because the oven clock runs fast.",
+      "I stayed awake until midnight purely out of spite and regretted it by lunch.",
+      "Somebody ate all twelve grapes before the clock had finished striking one.",
+      "This year I'm going to read more, starting with the back of this cereal box.",
+      "We swept up confetti until spring and still found some in the piano.",
+      "My only resolution is to stop volunteering to host the party."
+    ]
+  }
+}

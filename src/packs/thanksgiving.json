@@ -1,0 +1,61 @@
+{
+  "id": "thanksgiving",
+  "name": "Thanksgiving",
+  "icon": "🦃",
+  "description": "Gravy, football and the kids' table.",
+  "rating": "family",
+  "version": 1,
+  "phrases": {
+    "easy": [
+      "the good gravy boat",
+      "a suspicious cranberry",
+      "the kids' table",
+      "emergency stuffing",
+      "the wishbone rematch",
+      "a turkey-shaped candle",
+      "third helping of pie",
+      "the folding chair shortage",
+      "canned cranberry ridges",
+      "a parade balloon on the loose",
+      "the nap couch",
+      "leftover sandwich season",
+      "the fancy napkins",
+      "a lumpy mashed potato",
+      "the carving knife debate",
+      "pumpkin spice everything",
+      "a casserole of mystery",
+      "the stretchy pants",
+      "grandpa's football opinions",
+      "one lonely green bean"
+    ],
+    "medium": [
+      "The turkey is still frozen in the middle.",
+      "Who put marshmallows on that?",
+      "I'm thankful for elastic waistbands.",
+      "Uncle Ray brought up the map again.",
+      "The gravy has developed a skin.",
+      "Somebody sat on the pumpkin pie.",
+      "I was told there would be rolls.",
+      "The dog got the drumstick fair and square.",
+      "We ran out of chairs, so I'm on a cooler.",
+      "Save room for the second dessert table.",
+      "That's the good china, not a frisbee.",
+      "The oven timer has been beeping since noon.",
+      "I only came for the sweet potatoes.",
+      "Nobody touch the thermostat this year.",
+      "The cornucopia is purely decorative."
+    ],
+    "hard": [
+      "Every year the turkey gets bigger and the oven stays exactly the same size.",
+      "Let's go round the table and hear what everyone did with my casserole dish.",
+      "The parade was fine until the giant squirrel balloon drifted into our street.",
+      "My aunt hides the good pie in the laundry room and thinks nobody knows.",
+      "We deep-fried the turkey once and the fence has never forgiven us.",
+      "I fell asleep during the game and woke up holding somebody else's plate.",
+      "The kids' table has unionised and is demanding a later bedtime.",
+      "Grandma measures the butter with her heart and the salt with her elbow.",
+      "There are eleven side dishes and somehow nine of them are beige.",
+      "I'm not saying the stuffing was dry, but the dog asked for a glass of water."
+    ]
+  }
+}

@@ -8,32 +8,42 @@ The app only manages hands, timers and scoring; all of the play happens out loud
 
 | | | | |
 | --- | --- | --- | --- |
-| ![Start screen](docs/home.png) | ![The hand](docs/hand.png) | ![Covered hand](docs/cover.png) | ![Contraband! raid](docs/raid.png) |
+| ![Start screen](docs/home.png) | ![A live countdown](docs/hand.png) | ![Covered hand](docs/cover.png) | ![Contraband! raid](docs/raid.png) |
 
 ## How to play
 
 1. Everyone starts with **5 secret phrases** (the host can choose 3 to 8, and how spicy they are).
 2. Say a phrase out loud in conversation, then tap **Said it** on that card. A private 30-second countdown starts.
-3. If nobody catches it in 30 seconds, shout **"Smuggled!"**, show the card and stamp it out of your hand.
+3. If nobody calls it in 30 seconds, shout **"Smuggled!"**, show the card and stamp it out of your hand.
 4. To catch someone, shout **"Contraband!"** inside the 30 seconds **and repeat the phrase**. Pointing at a person is not enough.
-5. Caught: the player taps **Failed** on that card (it works even if they never got as far as starting the timer). The phrase is seized and replaced, and the catcher earns a **bounty coin**.
+5. Caught: tap **Failed** on that card (it works even if you never got as far as starting the
+   timer). The phrase is seized and replaced, and the catcher earns a **bounty coin**. Each coin
+   swaps one of your phrases for a fresh one whenever you like; coins pile up in the corner of the
+   screen until you spend them, and earning one never interrupts you beyond a coin flip.
 6. Wrong call: the caller draws an extra phrase and loses one of their 3 inspector badges. No badges, no calling. Bluffing with odd sentences to drain badges is allowed.
-7. Each bounty coin swaps one of your phrases for a fresh one. Coins pile up in the corner of the screen until you choose to spend them; nothing interrupts you when you earn one beyond a coin flip.
-8. First player with an empty hand wins.
-9. Phrases must be spoken aloud. Close paraphrases of long phrases count.
+7. Everyone also gets one **catchphrase**, always an easy one. Say it as often as you dare: it never
+   leaves your hand, and each time it survives its 30 seconds your catchphrase count goes up. If you
+   are caught you keep it, but that one does not count (and the catcher still earns their coin).
+   The host can switch catchphrases off, which also drops this rule from the rules shown in the app.
+8. First player with an empty hand wins. The catchphrase does not need clearing.
+9. Phrases must be spoken aloud.
+10. **Bend a phrase, never break it.** You may swap one or two filler words (and, but, or) and
+    rearrange it slightly to suit the local dialect, but never change the important details or the
+    spirit of the phrase. As a rule of thumb the phrase should stay 95% original.
+11. Be careful: if everyone else disagrees with how you bent a phrase, you are caught.
 
 ## Game settings
 
 The host of a room (or everyone, in an offline game) chooses four things:
 
-- **Phrase packs.** The main crate has 1,176 phrases; the bonus travel crate adds 40.
+- **Phrase packs.** The main crate has 1,176 phrases. Nine bonus crates of 40 to 45 phrases each
+  can be mixed in: Lost Luggage, Thanksgiving, Christmas, New Year's, For The Young Readers,
+  Mafia, Sports, Impossible and Pure Comedy.
 - **Phrases each.** 3 to 8 to start with. Fewer is a quick round, more is a long con.
 - **Spiciness.** Every phrase is rated easy, medium or hard to slip into conversation, shown as
   one to three chillies on the card. A level is never one difficulty: it sets the blend.
-- **"Contraband!" calls, on or off.** On is the full game above. Off removes the shout, the
-  badges and the wrong-call penalty (rules 4 and 6): you catch someone simply by repeating their
-  phrase, they tap Failed and name you, and you get the coin. The rules shown in the app change to
-  match the game being played.
+- **Catchphrases, on or off.** On by default. Off, nobody is dealt a catchphrase and the rules and
+  scoreboard shown in the app leave it out.
 
 | Spiciness | Easy | Medium | Hard |
 | --- | --- | --- | --- |
@@ -80,8 +90,7 @@ if someone picks the wrong spiciness.
 
 **Synced rooms (online).** The host opens a room; others join by code, link or QR. The server owns
 the deck and every draw. You get a live scoreboard, a **Contraband!** button that names the accused
-(who confirms which phrase was caught, or denies), automatic bust / bounty / wrong-call handling, a
-**Failed** button that lets a caught player own up and name their catcher, and
+(who confirms which phrase was caught, or denies), automatic bust / swap / wrong-call handling, and
 a win announcement on every phone with the winner's smuggled phrases revealed. The accused's clock
 stops while a call is being settled.
 
@@ -201,6 +210,7 @@ A pack is a JSON file in `src/packs/`:
 {
   "id": "after-dark",
   "name": "After Dark",
+  "icon": "🌙",
   "description": "Not for the family table.",
   "rating": "adult",
   "version": 1,

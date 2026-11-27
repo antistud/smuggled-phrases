@@ -3,7 +3,7 @@ import type { Phrase } from './packs';
 import type { Accusation, Card } from './rules';
 import type { GameSettings } from './settings';
 
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 3;
 export const MAX_ROOM_PLAYERS = 12;
 export const MAX_NAME_LENGTH = 16;
 
@@ -23,8 +23,8 @@ export type ClientMessage =
   | { t: 'declare'; cardId: string }
   | { t: 'undeclare'; cardId: string }
   | { t: 'smuggle'; cardId: string }
-  /** "Failed": I was caught on this card. Naming the catcher pays them a bounty coin. */
-  | { t: 'caught'; cardId: string; catcherId?: string | null }
+  /** Own up to being caught without waiting for a formal call. `catcherId` earns that player a swap. */
+  | { t: 'caught'; cardId: string; catcherId?: string }
   | { t: 'accuse'; accusedId: string }
   | { t: 'resolve'; cardId: string | null }
   | { t: 'cancelAccusation' }
@@ -43,6 +43,8 @@ export interface ScoreRow {
   badges: number;
   smuggled: number;
   seized: number;
+  /** Times their catchphrase got through uncaught. Absent from older servers. */
+  catchCount?: number;
 }
 
 export interface RoomView {
@@ -60,6 +62,9 @@ export interface RoomView {
     swapCredits: number;
     smuggled: Phrase[];
     seized: number;
+    /** The phrase you can say over and over, and how often it has got through. */
+    catchphrase?: Card | null;
+    catchCount?: number;
   };
   accusation: Accusation | null;
   winner: { id: string; name: string; phrases: Phrase[] } | null;
@@ -69,6 +74,8 @@ export interface RoomView {
 export type Announcement =
   | { kind: 'smuggled'; name: string; text: string }
   | { kind: 'seized'; name: string; by: string | null; text: string }
+  | { kind: 'catchphrase'; name: string; text: string; count: number }
+  | { kind: 'catchphraseCaught'; name: string; by: string | null; text: string }
   | { kind: 'wrongCall'; name: string; accused: string | null; badgesLeft: number }
   | { kind: 'cancelled' }
   | { kind: 'joined'; name: string }

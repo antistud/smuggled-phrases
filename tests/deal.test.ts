@@ -99,7 +99,11 @@ describe('seeded offline deal', () => {
     r = applyAction(r.game, { type: 'caught', playerId: OFFLINE_PLAYER_ID, cardId: id });
     if (!r.ok) throw new Error(r.error);
     g = r.game;
-    expect(g.players[OFFLINE_PLAYER_ID].hand[0].id).toBe(pile[HAND_SIZE]);
+    // The catchphrase was lifted out of the pile after the hand was dealt.
+    const catchphrase = g.players[OFFLINE_PLAYER_ID].catchphrase!;
+    expect(catchphrase.heat).toBe(1);
+    expect(pile.slice(HAND_SIZE)).toContain(catchphrase.id);
+    expect(g.players[OFFLINE_PLAYER_ID].hand[0].id).toBe(pile.slice(HAND_SIZE).filter((p) => p !== catchphrase.id)[0]);
   });
 
   it('honours hand size and gives every player plenty of replacement draws', () => {
@@ -172,10 +176,10 @@ describe('spiciness mix', () => {
 
   it('normalises settings from anywhere', () => {
     expect(normalizeSettings(undefined)).toEqual(DEFAULT_SETTINGS);
-    expect(normalizeSettings({ handSize: 2.6, spice: 9 })).toEqual({ handSize: MIN_HAND_SIZE, spice: 5, calls: true });
-    expect(normalizeSettings({ calls: false }).calls).toBe(false);
-    expect(normalizeSettings({ calls: 'no' as unknown as boolean }).calls).toBe(true);
-    expect(manifestNumber('LAMA', ['core'], { calls: false })).not.toBe(manifestNumber('LAMA', ['core'], { calls: true }));
+    expect(normalizeSettings({ handSize: 2.6, spice: 9 })).toEqual({ handSize: MIN_HAND_SIZE, spice: 5, catchphrase: true });
+    expect(normalizeSettings({ catchphrase: false }).catchphrase).toBe(false);
+    expect(normalizeSettings({ catchphrase: 'no' as unknown as boolean }).catchphrase).toBe(true);
+    expect(manifestNumber('LAMA', ['core'], { catchphrase: false })).not.toBe(manifestNumber('LAMA', ['core'], { catchphrase: true }));
     expect(normalizeSettings({ handSize: Number.NaN, spice: 'hot' as unknown as number })).toEqual(DEFAULT_SETTINGS);
     expect(normalizeSettings({ handSize: 50 }).handSize).toBe(MAX_HAND_SIZE);
   });
@@ -189,6 +193,15 @@ describe('phrase packs', () => {
     expect(new Set(all.map((t) => t.trim().toLowerCase())).size).toBe(all.length);
     expect(PACKS.every((p) => p.rating === 'family')).toBe(true);
     expect(deckSize(buildDeck(PACKS.map((p) => p.id)))).toBe(all.length);
+  });
+
+  it('gives every pack an icon, a unique id and phrases at every difficulty', () => {
+    expect(new Set(PACKS.map((p) => p.id)).size).toBe(PACKS.length);
+    for (const pack of PACKS) {
+      expect(pack.icon, pack.id).toBeTruthy();
+      expect(pack.name.length, pack.id).toBeGreaterThan(0);
+      for (const tier of TIERS) expect(pack.phrases[tier].length, `${pack.id} ${tier}`).toBeGreaterThanOrEqual(5);
+    }
   });
 
   it('has a deep bench at every difficulty in the core pack', () => {
