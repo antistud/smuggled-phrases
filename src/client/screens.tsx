@@ -375,7 +375,7 @@ function SettingsPicker(props: { value: GameSettings; onChange: (s: GameSettings
         <p class="marker spiceblurb">{level.blurb}</p>
       </div>
       <div class="field">
-        <span class="label">Catchphrase</span>
+        <span class="label">Add-ons</span>
         <button class="toggle" role="switch" aria-checked={catchphrase} onClick={() => set({ catchphrase: !catchphrase })}>
           <span class="sw" />
           <span>
@@ -383,7 +383,7 @@ function SettingsPicker(props: { value: GameSettings; onChange: (s: GameSettings
             <small>
               {catchphrase
                 ? 'Everyone also gets one easy phrase to say again and again, counted each time it gets through.'
-                : 'No catchphrase: just the phrases in your hand.'}
+                : 'Optional extra for experienced tables: a bonus phrase you can repeat all game. Off keeps things simple.'}
             </small>
           </span>
         </button>
@@ -394,15 +394,21 @@ function SettingsPicker(props: { value: GameSettings; onChange: (s: GameSettings
 
 function settingsSummary(s: GameSettings): string {
   const level = spiceLevel(s.spice);
-  return `${s.handSize} phrases each · ${level.name} (${level.mix.easy}/${level.mix.medium}/${level.mix.hard})${s.catchphrase ? '' : ' · no catchphrase'}`;
+  return `${s.handSize} phrases each · ${level.name} (${level.mix.easy}/${level.mix.medium}/${level.mix.hard})${s.catchphrase ? ' · catchphrases on' : ''}`;
 }
+
+/**
+ * Offline (no-network, honor-system) games are switched off: every game is a
+ * synced room. The code for them is intact; flip this to bring the option back.
+ */
+const OFFLINE_MODE_ENABLED = false;
 
 export function Setup(props: { kind: 'create' | 'join'; code?: string; forceSync?: boolean; onBack: () => void; onSession: (s: Session) => void }) {
   const creating = props.kind === 'create';
-  const [mode, setMode] = useState<'sync' | 'offline'>(props.forceSync || navigator.onLine ? 'sync' : 'offline');
+  const [mode, setMode] = useState<'sync' | 'offline'>(!OFFLINE_MODE_ENABLED || props.forceSync || navigator.onLine ? 'sync' : 'offline');
   const [name, setName] = useState(() => account.current?.name || (load<string>('name') ?? ''));
   const [packs, setPacks] = useState<string[]>(DEFAULT_PACK_IDS);
-  const [settings, setSettings] = useState<GameSettings>(() => ({ ...DEFAULT_SETTINGS, ...(load<GameSettings>('settings') ?? {}) }));
+  const [settings, setSettings] = useState<GameSettings>(() => ({ ...DEFAULT_SETTINGS, ...(load<GameSettings>('gameSettings') ?? {}) }));
   const [code, setCode] = useState(() => (creating ? randomCode() : props.code ?? ''));
   const [number, setNumber] = useState<number | null>(null);
 
@@ -411,7 +417,7 @@ export function Setup(props: { kind: 'create' | 'join'; code?: string; forceSync
 
   const go = () => {
     if (!ready) return;
-    save('settings', settings);
+    save('gameSettings', settings);
     if (mode === 'sync') {
       save('name', name.trim());
       props.onSession(creating ? SyncSession.host(name.trim(), packs, settings) : SyncSession.join(validCode, name.trim()));
@@ -424,15 +430,20 @@ export function Setup(props: { kind: 'create' | 'join'; code?: string; forceSync
     <div class="screen">
       <TopBar title={creating ? 'Start a game' : 'Join a game'} onBack={props.onBack} />
       <div class="stack" style="gap:16px">
-        <div class="seg" role="group" aria-label="Game type">
-          <button aria-pressed={mode === 'sync'} onClick={() => setMode('sync')}>Synced room</button>
-          <button aria-pressed={mode === 'offline'} onClick={() => setMode('offline')}>Offline</button>
-        </div>
-        <p class="muted" style="font-size:.92rem">
-          {mode === 'sync'
-            ? 'Needs internet. Live scoreboard, and the app settles every “Contraband!” call.'
-            : 'No signal needed. Everyone types the same code and scores on the honor system.'}
-        </p>
+        {OFFLINE_MODE_ENABLED && (
+          <>
+            <div class="seg" role="group" aria-label="Game type">
+              <button aria-pressed={mode === 'sync'} onClick={() => setMode('sync')}>Synced room</button>
+              <button aria-pressed={mode === 'offline'} onClick={() => setMode('offline')}>Offline</button>
+            </div>
+            <p class="muted" style="font-size:.92rem">
+              {mode === 'sync'
+                ? 'Needs internet. Live scoreboard, and the app settles every “Contraband!” call.'
+                : 'No signal needed. Everyone types the same code and scores on the honor system.'}
+            </p>
+          </>
+        )}
+        {!navigator.onLine && <p class="note bad">You look offline. You need a connection to open or join a room.</p>}
 
         {!creating && (
           <label class="field">
@@ -763,7 +774,7 @@ export function HowTo(props: { settings?: GameSettings; onBack: () => void }) {
       <p class="tagline" style="margin:0 0 14px">Talk normal. Smuggle nonsense. Don’t get searched.</p>
       <RuleList settings={props.settings} />
       <p class="muted" style="margin:14px 0;font-size:.9rem">
-        Your timers keep running if the phone locks. In a synced room the app tracks the scoreboard and settles calls; offline, it is all on your honor.
+        Your timers keep running if the phone locks, and the app tracks the scoreboard and settles calls for you.
       </p>
       <a
         class="link"

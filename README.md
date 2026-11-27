@@ -21,11 +21,12 @@ The app only manages hands, timers and scoring; all of the play happens out loud
    swaps one of your phrases for a fresh one whenever you like; coins pile up in the corner of the
    screen until you spend them, and earning one never interrupts you beyond a coin flip.
 6. Wrong call: the caller draws an extra phrase and loses one of their 3 inspector badges. No badges, no calling. Bluffing with odd sentences to drain badges is allowed.
-7. Everyone also gets one **catchphrase**, always an easy one. Say it as often as you dare: it never
-   leaves your hand, and each time it survives its 30 seconds your catchphrase count goes up. If you
-   are caught you keep it, but that one does not count (and the catcher still earns their coin).
-   The host can switch catchphrases off, which also drops this rule from the rules shown in the app.
-8. First player with an empty hand wins. The catchphrase does not need clearing.
+7. Optional add-on, off by default: the host can give everyone a **catchphrase**, always an easy
+   one. Say it as often as you dare: it never leaves your hand, and each time it survives its 30
+   seconds your catchphrase count goes up. If you are caught you keep it, but that one does not
+   count (and the catcher still earns their coin). It is hidden from the rules shown in the app
+   unless it is switched on.
+8. First player with an empty hand wins. A catchphrase, if you are playing with them, does not need clearing.
 9. Phrases must be spoken aloud.
 10. **Bend a phrase, never break it.** You may swap one or two filler words (and, but, or) and
     rearrange it slightly to suit the local dialect, but never change the important details or the
@@ -34,7 +35,7 @@ The app only manages hands, timers and scoring; all of the play happens out loud
 
 ## Game settings
 
-The host of a room (or everyone, in an offline game) chooses four things:
+The host of a room chooses four things:
 
 - **Phrase packs.** The main crate has 1,176 phrases. Nine bonus crates of 40 to 45 phrases each
   can be mixed in: Lost Luggage, Thanksgiving, Christmas, New Year's, For The Young Readers,
@@ -42,8 +43,13 @@ The host of a room (or everyone, in an offline game) chooses four things:
 - **Phrases each.** 3 to 8 to start with. Fewer is a quick round, more is a long con.
 - **Spiciness.** Every phrase is rated easy, medium or hard to slip into conversation, shown as
   one to three chillies on the card. A level is never one difficulty: it sets the blend.
-- **Catchphrases, on or off.** On by default. Off, nobody is dealt a catchphrase and the rules and
-  scoreboard shown in the app leave it out.
+- **Add-on: catchphrases.** Off unless the host turns it on (see rule 7). It confuses first-time
+  players, so the plain game is the default.
+
+**No repeats.** A phrase is never dealt twice in a game, to anyone: the server owns one deck and
+every hand, replacement, swap and penalty draw comes off it. A room also remembers what it has
+already shown, so "Deal again" keeps bringing new phrases; an earlier phrase only comes back once
+the chosen packs have nothing new left at that difficulty.
 
 | Spiciness | Easy | Medium | Hard |
 | --- | --- | --- | --- |
@@ -68,33 +74,29 @@ on an iPhone the link opens in Safari, not in the installed app.) Signed-in play
 
 - **A record kept on the server:** phrases smuggled and seized, smugglers caught, wrong calls,
   clean getaways and games finished, with a rank that follows them to any phone.
-- **Counting done by the server.** In a synced room the room itself adds to each signed-in
-  player's record as things happen, so it cannot be faked from a phone. Offline games are reported
-  by the phone afterwards (queued until there is a connection, capped and de-duplicated), so that
-  part is on the honor system like the rest of offline play.
+- **Counting done by the server.** The room itself adds to each signed-in player's record as
+  things happen, so it cannot be faked from a phone.
 - **Their alias remembered** and prefilled when they join.
 
 Guests still get the same record, kept on the phone only; it moves onto the account the first time
 they sign in. Anyone can change their name after joining, from the lobby or the scoreboard, and
 everyone is told. The rules pop up once, the first time a game is dealt on a phone.
 
-## Two ways to play
+## Rooms
 
-**Offline (no network at all).** One player makes a 4-letter code; everyone types it in and picks a
-unique player number (1-10). Each phone shuffles the same deck with a PRNG seeded from the code and
-takes only its own stripe of it, so no two phones ever hold the same phrase and replacement draws
-never collide. Scoring is on the honor system. A 3-digit "manifest check" number lets the table
-confirm everyone typed the same code and picked the same packs and settings. Each difficulty
-tier is striped separately before a phone mixes its own pile, so hands stay collision-free even
-if someone picks the wrong spiciness.
+The host opens a room; others join by code, link or QR. The server owns the deck and every draw.
+You get a live scoreboard, a **Contraband!** button that names the accused (who confirms which
+phrase was caught, or denies), automatic bust / bounty / wrong-call handling, a **Failed** button
+that lets a caught player own up and name their catcher, and a win announcement on every phone
+with the winner's smuggled phrases revealed. The accused's clock stops while a call is being
+settled.
 
-**Synced rooms (online).** The host opens a room; others join by code, link or QR. The server owns
-the deck and every draw. You get a live scoreboard, a **Contraband!** button that names the accused
-(who confirms which phrase was caught, or denies), automatic bust / swap / wrong-call handling, and
-a win announcement on every phone with the winner's smuggled phrases revealed. The accused's clock
-stops while a call is being settled.
+An older no-network mode (everyone types a shared code and picks a player number, scoring on the
+honor system) is switched off in the app: it was a source of duplicate phrases whenever two phones
+picked the same number. The code is still there; set `OFFLINE_MODE_ENABLED` in
+`src/client/screens.tsx` to bring the option back.
 
-In both modes the game survives a locked phone or a reload: timers are stored as start timestamps,
+The game survives a locked phone or a reload: timers are stored as start timestamps,
 state is persisted locally, and synced phones reconnect on their own.
 
 ## Stack
@@ -114,7 +116,7 @@ src/
   packs/            phrase decks (JSON)            <- core.json is the 1,176 phrase deck
   shared/           pure game logic, no DOM, no network
     rules.ts        the rules engine (reducer: game + action -> game + events)
-    deal.ts         seeded shuffle and per-player stripes for offline mode
+    deal.ts         seeded shuffle and per-player stripes for the (switched-off) offline mode
     settings.ts     hand size, spiciness levels and the difficulty mixing
     prng.ts         hash, mulberry32, shuffle, game codes
     packs.ts        pack registry and deck building
@@ -142,7 +144,7 @@ Requires Node 20+.
 ```sh
 npm install
 npm test            # rules engine, seeded deal, packs, room logic, accounts
-npm run dev         # app on http://localhost:5173 (offline mode works on its own)
+npm run dev         # app on http://localhost:5173
 npm run dev:worker  # in a second terminal: rooms on :8787, proxied from /api by Vite
 ```
 
@@ -253,8 +255,6 @@ laid over the top and never receives input.
   has no vibration API, so there the card turns green instead. The screen is kept awake while a
   countdown runs (where Wake Lock is supported); if the phone was locked anyway, the buzz comes
   when you unlock it.
-- **Offline mode** supports up to 10 players and gives each about 117 phrases from the main crate. Player numbers must
-  be unique; the app cannot check that without a network.
 - **Synced rooms** hold up to 12 players and close after 6 hours without activity. Players are a
   display name plus a random per-device id; signing in is optional. Late arrivals are dealt in.
   The host can void a stuck call or remove a player whose phone has gone away, and if the host

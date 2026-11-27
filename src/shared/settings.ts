@@ -11,6 +11,7 @@ export interface GameSettings {
   /** 1 (mild) to 5 (inferno). */
   spice: number;
   /**
+   * An optional add-on, off unless the host turns it on.
    * Whether every player also gets a catchphrase: one easy phrase that never
    * leaves, can be said over and over, and counts each time it gets through.
    */
@@ -19,7 +20,7 @@ export interface GameSettings {
 
 export const MIN_HAND_SIZE = 3;
 export const MAX_HAND_SIZE = 8;
-export const DEFAULT_SETTINGS: GameSettings = { handSize: 5, spice: 2, catchphrase: true };
+export const DEFAULT_SETTINGS: GameSettings = { handSize: 5, spice: 2, catchphrase: false };
 
 export interface SpiceLevel {
   level: number;

@@ -90,7 +90,7 @@ describe('seeded offline deal', () => {
   });
 
   it('replacement draws come from the same private pile', () => {
-    let g: Game = createOfflineGame('DUCK', packs, 3, { handSize: 5, spice: 3 });
+    let g: Game = createOfflineGame('DUCK', packs, 3, { handSize: 5, spice: 3, catchphrase: true });
     const pile = offlinePile('DUCK', packs, 3, 3).map((p) => p.id);
     expect(g.players[OFFLINE_PLAYER_ID].hand.map((c) => c.id)).toEqual(pile.slice(0, HAND_SIZE));
     const id = g.players[OFFLINE_PLAYER_ID].hand[0].id;
@@ -176,9 +176,9 @@ describe('spiciness mix', () => {
 
   it('normalises settings from anywhere', () => {
     expect(normalizeSettings(undefined)).toEqual(DEFAULT_SETTINGS);
-    expect(normalizeSettings({ handSize: 2.6, spice: 9 })).toEqual({ handSize: MIN_HAND_SIZE, spice: 5, catchphrase: true });
-    expect(normalizeSettings({ catchphrase: false }).catchphrase).toBe(false);
-    expect(normalizeSettings({ catchphrase: 'no' as unknown as boolean }).catchphrase).toBe(true);
+    expect(normalizeSettings({ handSize: 2.6, spice: 9 })).toEqual({ handSize: MIN_HAND_SIZE, spice: 5, catchphrase: false });
+    expect(normalizeSettings({ catchphrase: true }).catchphrase).toBe(true);
+    expect(normalizeSettings({ catchphrase: 'yes' as unknown as boolean }).catchphrase).toBe(false);
     expect(manifestNumber('LAMA', ['core'], { catchphrase: false })).not.toBe(manifestNumber('LAMA', ['core'], { catchphrase: true }));
     expect(normalizeSettings({ handSize: Number.NaN, spice: 'hot' as unknown as number })).toEqual(DEFAULT_SETTINGS);
     expect(normalizeSettings({ handSize: 50 }).handSize).toBe(MAX_HAND_SIZE);

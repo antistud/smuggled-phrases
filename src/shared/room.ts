@@ -37,6 +37,13 @@ export interface Room {
   settings: GameSettings;
   members: Member[];
   game: Game | null;
+  /**
+   * Phrase ids this room has already handed out in earlier games, so a re-deal
+   * never repeats one until the chosen packs have truly run out.
+   */
+  used?: string[];
+  /** Every phrase id that was in the current game's pile when it was dealt. */
+  dealtFrom?: string[];
   /** Monotonic counter for public ids. */
   seq: number;
 }
@@ -69,12 +76,37 @@ function nameOf(room: Room, id: string | null | undefined): string | null {
   return room.members.find((m) => m.id === id)?.name ?? null;
 }
 
-/** A new server-side pile: every tier shuffled, then woven to the room's spiciness. */
-function freshPile(room: Room, rand: () => number): Phrase[] {
+/**
+ * Every phrase the room has shown anyone so far: what earlier games used, plus
+ * whatever has left the current game's pile (hands, catchphrases, draws, swaps).
+ */
+function usedSoFar(room: Room): string[] {
+  const used = new Set(room.used ?? []);
+  if (room.game && room.dealtFrom) {
+    const waiting = new Set(room.game.pile.map((p) => p.id));
+    for (const id of room.dealtFrom) if (!waiting.has(id)) used.add(id);
+  }
+  return [...used];
+}
+
+/**
+ * A new server-side pile: every tier shuffled, then woven to the room's
+ * spiciness. Phrases this room has not seen yet always come first; ones from
+ * earlier games only return once a tier has nothing new left. Returns the
+ * memory to carry forward (cleared when the whole deck has been seen).
+ */
+function freshPile(room: Room, rand: () => number): { pile: Phrase[]; used: string[] } {
   const deck = buildDeck(room.packs);
-  const shuffled = {} as TieredDeck;
-  for (const tier of TIERS) shuffled[tier] = shuffle(deck[tier], rand);
-  return mixPile(shuffled, room.settings.spice, rand);
+  let used = new Set(usedSoFar(room));
+  // Truly run out: start the deck over.
+  if (TIERS.every((tier) => deck[tier].every((p) => used.has(p.id)))) used = new Set();
+  const ordered = {} as TieredDeck;
+  for (const tier of TIERS) {
+    const fresh = shuffle(deck[tier].filter((p) => !used.has(p.id)), rand);
+    const seen = shuffle(deck[tier].filter((p) => used.has(p.id)), rand);
+    ordered[tier] = [...fresh, ...seen];
+  }
+  return { pile: mixPile(ordered, room.settings.spice, rand), used: [...used] };
 }
 
 /** What a batch of game events adds to each player's lifetime record. */
@@ -193,7 +225,10 @@ export function handleMessage(
       if (msg.t === 'start' && room.phase !== 'lobby') return fail('wrong-phase');
       if (room.members.length < 2) return fail('need-players');
       const next = structuredCloneRoom(room);
-      next.game = createGame(next.members.map((m) => m.id), freshPile(next, rand), next.settings.handSize, next.settings.catchphrase);
+      const { pile, used } = freshPile(next, rand);
+      next.used = used;
+      next.dealtFrom = pile.map((p) => p.id);
+      next.game = createGame(next.members.map((m) => m.id), pile, next.settings.handSize, next.settings.catchphrase);
       next.phase = 'playing';
       return { room: next, news: [] };
     }
